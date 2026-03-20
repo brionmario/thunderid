@@ -105,6 +105,8 @@ func (th *themeMgtHandler) HandleThemePostRequest(w http.ResponseWriter, r *http
 		DisplayName: createdTheme.DisplayName,
 		Description: createdTheme.Description,
 		Theme:       createdTheme.Theme,
+		CreatedAt:   createdTheme.CreatedAt,
+		UpdatedAt:   createdTheme.UpdatedAt,
 	}
 
 	sysutils.WriteSuccessResponse(w, http.StatusCreated, themeResponse)
@@ -126,6 +128,8 @@ func (th *themeMgtHandler) HandleThemeGetRequest(w http.ResponseWriter, r *http.
 		DisplayName: theme.DisplayName,
 		Description: theme.Description,
 		Theme:       theme.Theme,
+		CreatedAt:   theme.CreatedAt,
+		UpdatedAt:   theme.UpdatedAt,
 	}
 
 	sysutils.WriteSuccessResponse(w, http.StatusOK, themeResponse)
@@ -153,6 +157,8 @@ func (th *themeMgtHandler) HandleThemePutRequest(w http.ResponseWriter, r *http.
 		DisplayName: updatedTheme.DisplayName,
 		Description: updatedTheme.Description,
 		Theme:       updatedTheme.Theme,
+		CreatedAt:   updatedTheme.CreatedAt,
+		UpdatedAt:   updatedTheme.UpdatedAt,
 	}
 
 	sysutils.WriteSuccessResponse(w, http.StatusOK, themeResponse)
