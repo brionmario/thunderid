@@ -1,13 +1,13 @@
 # Project Overview
 
-Thunder is a lightweight user and identity management product. Go backend + React frontend in a monorepo. It provides authentication and authorization via OAuth2/OIDC, flexible orchestration flows, and individual auth mechanisms (password, passwordless, social login).
+ThunderID is a lightweight user and identity management product. Go backend + React frontend in a monorepo. It provides authentication and authorization via OAuth2/OIDC, flexible orchestration flows, and individual auth mechanisms (password, passwordless, social login).
 
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - For build and running - [Makefile](Makefile) and [README.md](README.md)
 - Documentation at [docs/content](docs/content)
 
-Thunder's login gate leverages v2 of the [Asgardeo JavaScript SDK](https://github.com/asgardeo/javascript), consumed via its published package in typical setups.
-Clone the SDK repository only if you are developing or debugging the SDK itself, or testing Thunder against unreleased SDK changes.
+ThunderID's login gate leverages v2 of the [Asgardeo JavaScript SDK](https://github.com/asgardeo/javascript), consumed via its published package in typical setups.
+Clone the SDK repository only if you are developing or debugging the SDK itself, or testing ThunderID against unreleased SDK changes.
 
 ## General Rules
 
@@ -38,7 +38,7 @@ Clone the SDK repository only if you are developing or debugging the SDK itself,
 
 ## Agent Skills
 
-- [Thunder Console Navigator](.agent/skills/console/SKILL.md) — Browse and interact with the Thunder Console UI using `playwright-cli`. Use when asked to navigate the console, test UI changes, or create/edit resources through the browser.
+- [ThunderID Console Navigator](.agent/skills/console/SKILL.md) — Browse and interact with the ThunderID Console UI using `playwright-cli`. Use when asked to navigate the console, test UI changes, or create/edit resources through the browser.
 
 ## Contributing Guidelines
 

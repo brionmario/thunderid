@@ -36,7 +36,7 @@ services:
         condition: service_completed_successfully
     restart: "no"
 
-  # Run Thunder server with the shared database
+  # Run ThunderID server with the shared database
   thunder:
     image: ghcr.io/asgardeo/thunder:latest
     depends_on:

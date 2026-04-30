@@ -17,13 +17,13 @@
 apiVersion: v2
 name: thunder
 description: |
-  Umbrella Helm chart for the Thunder Identity Provider on OpenChoreo.
+  Umbrella Helm chart for the ThunderID Identity Provider on OpenChoreo.
 
   Sub-charts:
     thunder-oc-componenttype  — Registers the ComponentType (or ClusterComponentType) once
                              per cluster/namespace. Platform admins install this.
     thunder-component      — Deploys the Component, Workload, Release, and platform
-                             resources for a Thunder instance. Teams install this.
+                             resources for a ThunderID instance. Teams install this.
 
   Install both together (default):
     helm install thunder .

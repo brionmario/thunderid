@@ -2,7 +2,7 @@
   "private": true,
   "name": "@thunder/console",
   "version": "0.0.0",
-  "description": "⚡️ Thunder Console Application - The main control center to configure Thunder system.",
+  "description": "⚡️ ThunderID Console Application - The main control center to configure ThunderID system.",
   "keywords": [
     "thunder",
     "console",

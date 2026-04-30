@@ -31,9 +31,9 @@ interface PersonaOption {
 
 export const PERSONAS: PersonaOption[] = [
   {value: 'all', label: 'All Roles', description: 'Browse all documentation'},
-  {value: 'app', label: 'Application Developer', description: 'Integrate Thunder into your app'},
-  {value: 'iam', label: 'IAM Developer', description: 'Configure and manage Thunder'},
-  {value: 'devops', label: 'DevOps Engineer', description: 'Deploy and operate Thunder'},
+  {value: 'app', label: 'Application Developer', description: 'Integrate ThunderID into your app'},
+  {value: 'iam', label: 'IAM Developer', description: 'Configure and manage ThunderID'},
+  {value: 'devops', label: 'DevOps Engineer', description: 'Deploy and operate ThunderID'},
 ];
 
 export function applyPersona(persona: Persona): void {

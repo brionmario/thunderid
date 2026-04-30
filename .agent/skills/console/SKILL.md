@@ -1,10 +1,10 @@
 ---
 name: console
-description: Navigate and interact with the Thunder Console UI. Use when exploring the Thunder admin console, testing UI changes, creating users/applications/roles, or debugging the frontend.
+description: Navigate and interact with the ThunderID Console UI. Use when exploring the ThunderID admin console, testing UI changes, creating users/applications/roles, or debugging the frontend.
 allowed-tools: Bash(playwright-cli:*) Bash(npx:*)
 ---
 
-# Thunder Console Navigation with playwright-cli
+# ThunderID Console Navigation with playwright-cli
 
 ## Resolving the Console Base URL
 
@@ -13,7 +13,7 @@ Before running any commands, determine the console base URL. Do NOT hardcode a U
 1. **Check `deployment.yaml`** at `backend/cmd/server/repository/conf/deployment.yaml` for the `server.hostname` and `server.port`. If the backend is serving the console (production mode), the URL is `https://{hostname}:{port}/console`.
 2. **Check `vite.config.ts`** at `frontend/apps/thunder-console/vite.config.ts` for the development server `PORT` (default `5191`) and `HOST` (default `localhost`). If the frontend development server is running separately, the URL is `https://{HOST}:{PORT}/console`.
 3. **Check environment variables**: `PORT`, `HOST`, or `BASE_URL` may override the defaults.
-4. **If unable to resolve**, ask the user for the Thunder Console URL.
+4. **If unable to resolve**, ask the user for the ThunderID Console URL.
 
 Use the resolved URL as `{CONSOLE_URL}` in all commands below (e.g., `{CONSOLE_URL}`).
 
@@ -51,7 +51,7 @@ All commands use the named session `-s=thunder` so the browser persists across c
 
 ## Authentication
 
-Thunder Console requires authentication. The sign-in form is dynamically rendered by the Asgardeo SDK, so always use `snapshot` to get element refs before interacting.
+ThunderID Console requires authentication. The sign-in form is dynamically rendered by the Asgardeo SDK, so always use `snapshot` to get element refs before interacting.
 
 Default credentials: `admin` / `admin`
 
@@ -95,7 +95,7 @@ playwright-cli goto {CONSOLE_URL} -s=thunder
 
 ## Route Map
 
-The Thunder Console base path is `/console`. Append routes below to the resolved `{CONSOLE_URL}`. The sidebar is organized into categories.
+The ThunderID Console base path is `/console`. Append routes below to the resolved `{CONSOLE_URL}`. The sidebar is organized into categories.
 
 ### Sidebar Navigation
 
@@ -206,7 +206,7 @@ playwright-cli screenshot --filename=console-users.png -s=thunder
 
 - **Redirected to `/gate/signin`**: Auth expired. Re-authenticate or run `playwright-cli state-load thunder-auth -s=thunder`.
 - **Elements not found in snapshot**: Page may still be loading. Wait a moment and run `playwright-cli snapshot -s=thunder` again.
-- **HTTPS certificate errors**: Thunder uses self-signed certificates on multiple origins (gate, console, backend). The browser will block navigation with `ERR_CERT_AUTHORITY_INVALID`. To bypass, open a blank session first, then navigate via JS `eval` to trigger Chrome's interstitial error page, and click through it:
+- **HTTPS certificate errors**: ThunderID uses self-signed certificates on multiple origins (gate, console, backend). The browser will block navigation with `ERR_CERT_AUTHORITY_INVALID`. To bypass, open a blank session first, then navigate via JS `eval` to trigger Chrome's interstitial error page, and click through it:
 
   ```bash
   # 1. Open a blank browser session

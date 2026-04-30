@@ -1,6 +1,6 @@
 # Authentication Demo - Postman Collection
 
-This Postman collection demonstrates the main authentication/registration capabilities in Thunder. It showcases three different approaches to authenticate users and includes resources setup for running the demos. Additionally, it includes one scenario for user registration.
+This Postman collection demonstrates the main authentication/registration capabilities in ThunderID. It showcases three different approaches to authenticate users and includes resources setup for running the demos. Additionally, it includes one scenario for user registration.
 
 ## Demo Scenarios
 
@@ -13,7 +13,7 @@ Individual authentication endpoints that can be used independently for specific 
 - **Asgardeo Login** - OAuth-based login with Asgardeo
 
 ### 2. Authenticate with Flow Native APIs
-Orchestrated authentication flows using Thunder's flow execution engine:
+Orchestrated authentication flows using ThunderID's flow execution engine:
 - **Login with Username & Password** - Basic username/password flow
 - **Login with Username & Password (Verbose)** - Detailed flow execution with frontend metadata
 - **Login with SMS OTP** - SMS OTP-based authentication flow
@@ -54,7 +54,7 @@ User self-registration flows:
 
 ## Prerequisites
 
-1. A running Thunder server
+1. A running ThunderID server
 2. Postman desktop app or web version
 3. External service credentials (for social login demos):
    - Google OAuth credentials
@@ -70,10 +70,10 @@ Import the `environment.json` file into Postman and fill in the required values.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `scheme` | Thunder server scheme | `https` |
-| `host` | Thunder server host | `localhost` |
-| `port` | Thunder server port | `8090` |
-| `baseUrl` | Thunder server base URL | `{{scheme}}://{{host}}:{{port}}` (`https://localhost:8090`) |
+| `scheme` | ThunderID server scheme | `https` |
+| `host` | ThunderID server host | `localhost` |
+| `port` | ThunderID server port | `8090` |
+| `baseUrl` | ThunderID server base URL | `{{scheme}}://{{host}}:{{port}}` (`https://localhost:8090`) |
 
 ### Management Token App (for obtaining access tokens)
 

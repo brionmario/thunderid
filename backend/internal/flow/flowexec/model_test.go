@@ -52,7 +52,7 @@ func TestModelTestSuite(t *testing.T) {
 	config.ResetThunderRuntime()
 	err := config.InitializeThunderRuntime("/test/thunder/home", testConfig)
 	if err != nil {
-		t.Fatalf("failed to initialize Thunder runtime: %v", err)
+		t.Fatalf("failed to initialize ThunderID runtime: %v", err)
 	}
 
 	suite.Run(t, new(ModelTestSuite))

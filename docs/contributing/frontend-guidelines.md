@@ -1,6 +1,6 @@
 # Frontend Coding Guidelines
 
-React/TypeScript frontend guidelines for the Thunder project.
+React/TypeScript frontend guidelines for the ThunderID project.
 
 ## Tech Stack
 

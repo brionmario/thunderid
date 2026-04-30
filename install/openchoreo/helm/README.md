@@ -1,6 +1,6 @@
-# Thunder Helm Chart
+# ThunderID Helm Chart
 
-This Helm chart deploys Thunder Identity Management Service on the OpenChoreo platform. Thunder provides OAuth2, OpenID Connect, and other identity protocols.
+This Helm chart deploys ThunderID Identity Management Service on the OpenChoreo platform. ThunderID provides OAuth2, OpenID Connect, and other identity protocols.
 
 ## Overview
 
@@ -10,8 +10,8 @@ The umbrella chart contains two independent sub-charts:
 
 | Sub-chart | Purpose | Who installs |
 |-----------|---------|--------------|
-| `thunder-oc-componenttype` | Registers the `ClusterComponentType` (or namespace-scoped `ComponentType`) that defines Thunder's full schema and Kubernetes resource templates | Platform admins — once per cluster |
-| `thunder-component` | Deploys the `Component`, `Workload`, `ComponentRelease`, `ReleaseBinding`, and all platform resources for a Thunder instance | Teams — once per Thunder deployment |
+| `thunder-oc-componenttype` | Registers the `ClusterComponentType` (or namespace-scoped `ComponentType`) that defines ThunderID's full schema and Kubernetes resource templates | Platform admins — once per cluster |
+| `thunder-component` | Deploys the `Component`, `Workload`, `ComponentRelease`, `ReleaseBinding`, and all platform resources for a ThunderID instance | Teams — once per ThunderID deployment |
 
 Install both together (default):
 ```bash
@@ -23,7 +23,7 @@ Install each independently:
 # Platform admin: register the ComponentType once
 helm install thunder-type charts/thunder-oc-componenttype
 
-# Team: deploy a Thunder instance (ComponentType must already exist)
+# Team: deploy a ThunderID instance (ComponentType must already exist)
 helm install thunder-app charts/thunder-component -f my-values.yaml
 ```
 
@@ -59,7 +59,7 @@ post-install hooks (weight 0 → 1)
               ├── console-config    ← Console frontend config.js
               ├── file-config (×N)  ← one ConfigMap per attached configuration file
               ├── Deployment        ← wait-for-setup init container + thunder container
-              ├── Service           ← ClusterIP on the Thunder server port
+              ├── Service           ← ClusterIP on the ThunderID server port
               └── HTTPRoute         ← external ingress (when endpointVisibility: external)
 ```
 
@@ -69,13 +69,13 @@ post-install hooks (weight 0 → 1)
 |-------------|------|-------------|
 | `sqlite-pvc` | `v1/PersistentVolumeClaim` | Shared PVC for SQLite data files and setup markers. Always created regardless of `dbType`. |
 | `setup-job` | `batch/v1/Job` | Runs `./setup.sh` to initialise DB schemas. Writes `.setup-complete` marker on success. `backoffLimit: 3`, cleaned up after 300s. |
-| `thunder-config` | `v1/ConfigMap` | Thunder `deployment.yaml` with SQLite paths. Rendered when `dbType: sqlite`. |
-| `thunder-config-pg` | `v1/ConfigMap` | Thunder `deployment.yaml` with PostgreSQL connection details. Rendered when `dbType: postgres`. |
+| `thunder-config` | `v1/ConfigMap` | ThunderID `deployment.yaml` with SQLite paths. Rendered when `dbType: sqlite`. |
+| `thunder-config-pg` | `v1/ConfigMap` | ThunderID `deployment.yaml` with PostgreSQL connection details. Rendered when `dbType: postgres`. |
 | `gate-config` | `v1/ConfigMap` | Gate frontend `config.js` with server public URL. |
 | `console-config` | `v1/ConfigMap` | Console frontend `config.js` with client ID, scopes, and server URL. |
 | `file-config` | `v1/ConfigMap` (×N) | One ConfigMap per file attached via `configurations`. Dynamically rendered. |
-| `deployment` | `apps/v1/Deployment` | Thunder pod. Includes `wait-for-setup` init container that blocks until `.setup-complete` exists. |
-| `service` | `v1/Service` | ClusterIP service on the Thunder server port. |
+| `deployment` | `apps/v1/Deployment` | ThunderID pod. Includes `wait-for-setup` init container that blocks until `.setup-complete` exists. |
+| `service` | `v1/Service` | ClusterIP service on the ThunderID server port. |
 | `httproute-external` | `gateway.networking.k8s.io/v1/HTTPRoute` | External ingress route. Created when `endpointVisibility: external`. |
 
 ### Parameters vs Environment Configurations
@@ -87,7 +87,7 @@ post-install hooks (weight 0 → 1)
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `image` | Thunder container image (`repository:tag`) | `ghcr.io/asgardeo/thunder:latest` |
+| `image` | ThunderID container image (`repository:tag`) | `ghcr.io/asgardeo/thunder:latest` |
 | `runtime.imagePullPolicy` | Container image pull policy | `Always` |
 | `runtime.dbType` | Database engine: `sqlite` or `postgres` | `sqlite` |
 | `runtime.dbStorageSize` | PVC size for SQLite data files | `1Gi` |
@@ -102,7 +102,7 @@ post-install hooks (weight 0 → 1)
 |-------|-------------|---------|
 | `replicas` | Number of pod replicas | `1` |
 | `endpointVisibility` | `external` (`HTTPRoute`) or `internal` (ClusterIP only) | `external` |
-| `serverPublicUrl` | Thunder public-facing URL | `""` |
+| `serverPublicUrl` | ThunderID public-facing URL | `""` |
 | `gateClientHostname` | Gate service hostname | `""` |
 | `resourceRequestsCpu` | CPU request | `100m` |
 | `resourceRequestsMemory` | Memory request | `128Mi` |
@@ -170,13 +170,13 @@ helm upgrade --install thunder install/openchoreo/helm/ \
    # Check OpenChoreo resource status
    kubectl get componentrelease,releasebinding -n identity-platform
 
-   # Find the Thunder pod in the data plane namespace
+   # Find the ThunderID pod in the data plane namespace
    kubectl get pod -A | grep thunder
    ```
 
-4. **Access Thunder**:
+4. **Access ThunderID**:
 
-   Once the `ReleaseBinding` is active and the pod is running, Thunder is accessible via the `HTTPRoute` hostname:
+   Once the `ReleaseBinding` is active and the pod is running, ThunderID is accessible via the `HTTPRoute` hostname:
 
    ```
    http://<environmentName>-<componentName>-<componentNamespace>.<gateway-domain>:<port>
@@ -185,9 +185,9 @@ helm upgrade --install thunder install/openchoreo/helm/ \
 
 ## Promotion
 
-To promote Thunder to `staging` or `production`:
+To promote ThunderID to `staging` or `production`:
 
-1. Open the Backstage portal and navigate to the Thunder component.
+1. Open the Backstage portal and navigate to the ThunderID component.
 2. Click **Promote** on the `development` `ReleaseBinding`.
 3. Fill in the environment-specific `environmentConfigs` for the target environment:
    - `serverPublicUrl` — public URL for the target environment
@@ -204,10 +204,10 @@ To promote Thunder to `staging` or `production`:
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `thunder-component.componentName` | Base name for all OpenChoreo resources | `thunder` |
-| `thunder-component.image.repository` | Thunder container image repository | `ghcr.io/asgardeo/thunder` |
+| `thunder-component.image.repository` | ThunderID container image repository | `ghcr.io/asgardeo/thunder` |
 | `thunder-component.image.tag` | Container image tag | `latest` |
-| `thunder-component.thunder.server.port` | Port on which Thunder server listens | `8090` |
-| `thunder-component.serverPublicUrl` | Thunder public-facing URL | `<SERVER_PUBLIC_URL>` |
+| `thunder-component.thunder.server.port` | Port on which ThunderID server listens | `8090` |
+| `thunder-component.serverPublicUrl` | ThunderID public-facing URL | `<SERVER_PUBLIC_URL>` |
 | `thunder-component.project.name` | OpenChoreo project and Kubernetes `namespace` name | `identity-platform` |
 | `thunder-component.dataPlane.name` | `ClusterDataPlane` resource to bind environments to | `default` |
 | `thunder-component.replicas` | Pod replicas in the development environment | `1` |
@@ -218,7 +218,7 @@ To promote Thunder to `staging` or `production`:
 |-----------|-------------|---------|
 | `thunder-component.database.type` | Database engine: `sqlite` or `postgres` | `sqlite` |
 | `thunder-component.database.storageSize` | PVC size for SQLite files | `1Gi` |
-| `thunder-component.database.config.path` | SQLite config DB path (relative to Thunder working directory) | `repository/database/configdb.db` |
+| `thunder-component.database.config.path` | SQLite config DB path (relative to ThunderID working directory) | `repository/database/configdb.db` |
 | `thunder-component.database.runtime.path` | SQLite runtime DB path | `repository/database/runtimedb.db` |
 | `thunder-component.database.user.path` | SQLite user DB path | `repository/database/userdb.db` |
 | `thunder-component.database.host` | PostgreSQL hostname (`postgres` only) | — |
@@ -288,7 +288,7 @@ To promote Thunder to `staging` or `production`:
 
 ## OpenChoreo UI — Environment Variables
 
-When deploying or promoting Thunder through the OpenChoreo UI, set the following environment variables on the Workload.
+When deploying or promoting ThunderID through the OpenChoreo UI, set the following environment variables on the Workload.
 
 ### Endpoint
 
@@ -325,7 +325,7 @@ Use this to derive the following values when configuring the Component via the U
 
 | Environment Variable | How to get |
 |---------|------------|
-| `SERVER_PORT` | Fixed — port Thunder listens on inside the container (`8090`) |
+| `SERVER_PORT` | Fixed — port ThunderID listens on inside the container (`8090`) |
 | `CRYPTO_ENCRYPTION_KEY` | Generate a 32-byte hex key: `openssl rand -hex 32` |
 | `JWT_VALIDITY` | Token lifetime in seconds; adjust per security policy |
 | `OAUTH_REFRESH_TOKEN_VALIDITY` | Refresh token lifetime in seconds |
@@ -360,9 +360,9 @@ Use this to derive the following values when configuring the Component via the U
 
 | Environment Variable | How to get |
 |---------|------------|
-| `DB_CONFIG_PATH` | Path relative to Thunder working directory inside the container |
-| `DB_RUNTIME_PATH` | Path relative to Thunder working directory inside the container |
-| `DB_USER_PATH` | Path relative to Thunder working directory inside the container |
+| `DB_CONFIG_PATH` | Path relative to ThunderID working directory inside the container |
+| `DB_RUNTIME_PATH` | Path relative to ThunderID working directory inside the container |
+| `DB_USER_PATH` | Path relative to ThunderID working directory inside the container |
 
 ### Database — PostgreSQL (`dbType: postgres`)
 
@@ -407,7 +407,7 @@ install/openchoreo/helm/
     │       └── thunder-componenttype.yaml  # ClusterComponentType / ComponentType
     └── thunder-component/
         ├── Chart.yaml
-        ├── values.yaml                 # All Thunder instance defaults
+        ├── values.yaml                 # All ThunderID instance defaults
         └── templates/
             ├── namespace.yaml          # Kubernetes Namespace
             ├── thunder-platform.yaml   # Project, DeploymentPipeline, Environments
@@ -421,13 +421,13 @@ install/openchoreo/helm/
 # Check all OpenChoreo resources
 kubectl get clustercomponenttype,component,workload,componentrelease,releasebinding -n identity-platform
 
-# Find all Thunder pods across data plane namespaces
+# Find all ThunderID pods across data plane namespaces
 kubectl get pod -A | grep thunder
 
-# Check Thunder logs
+# Check ThunderID logs
 kubectl logs <pod-name> -n <dp-namespace>
 
-# Inspect the rendered Thunder configuration
+# Inspect the rendered ThunderID configuration
 kubectl get configmap <componentName>-config -n <dp-namespace> -o jsonpath='{.data.deployment\.yaml}'
 
 # Check setup job logs
@@ -454,5 +454,5 @@ helm template thunder install/openchoreo/helm/ \
 
 ## Contributing
 
-- Open an issue in the [Thunder GitHub repository](https://github.com/asgardeo/thunder)
+- Open an issue in the [ThunderID GitHub repository](https://github.com/asgardeo/thunder)
 - Refer to the project's [CONTRIBUTING guidelines](../../../CONTRIBUTING.md)

@@ -23,7 +23,7 @@
 /**
  * Generates Postman collections, environments, and globals from OpenAPI specifications.
  * Product name and slug are derived from docusaurus.thunder.config.ts to keep the
- * "Thunder" term easily changeable.
+ * "ThunderID" term easily changeable.
  *
  * Usage:
  *   node scripts/generate-postman-collections.mjs [--version-path <path>]
@@ -86,7 +86,7 @@ const CONVERT_OPTIONS = {
 /**
  * Extract project name and slug from docusaurus.thunder.config.ts using regex so the
  * script stays free of a TypeScript compilation step. The name drives display strings
- * (e.g. "Thunder API") and the slug drives file/folder names (e.g. "thunder").
+ * (e.g. "ThunderID API") and the slug drives file/folder names (e.g. "thunder").
  */
 function readThunderConfig(configPath) {
   const content = readFileSync(configPath, 'utf8');

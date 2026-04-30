@@ -2,7 +2,7 @@
   "private": true,
   "name": "@thunder/docs",
   "version": "0.0.0",
-  "description": "Documentation for ⚡️ Thunder",
+  "description": "Documentation for ⚡️ ThunderID",
   "author": "WSO2",
   "license": "Apache-2.0",
   "homepage": "https://github.com/asgardeo/thunder/tree/main/docs#readme",

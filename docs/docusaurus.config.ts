@@ -218,7 +218,7 @@ const config: Config = {
     },
   } satisfies Preset.ThemeConfig,
 
-  /* -------------------------------- Thunder Config ------------------------------- */
+  /* -------------------------------- ThunderID Config ------------------------------- */
   customFields: {
     thunder: thunderConfig,
   },

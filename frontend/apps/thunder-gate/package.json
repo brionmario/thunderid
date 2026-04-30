@@ -2,7 +2,7 @@
   "private": true,
   "name": "@thunder/gate",
   "version": "0.0.0",
-  "description": "⚡️ Thunder Gate Application - The main app handles gateway operations such as authentication, registrations and account recovery in Thunder.",
+  "description": "⚡️ ThunderID Gate Application - The main app handles gateway operations such as authentication, registrations and account recovery in ThunderID.",
   "keywords": [
     "thunder",
     "gate",

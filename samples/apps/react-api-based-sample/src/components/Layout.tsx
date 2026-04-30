@@ -98,7 +98,7 @@ function Layout() {
                 color: "primary.main",
               }}
             >
-              Thunder Sample
+              ThunderID Sample
             </Typography>
           </Link>
 

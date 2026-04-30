@@ -63,7 +63,7 @@ func TestRedisFlowStoreSuite(t *testing.T) {
 	}
 	config.ResetThunderRuntime()
 	if err := config.InitializeThunderRuntime("/test/thunder/home", testConfig); err != nil {
-		t.Fatalf("Failed to initialize Thunder runtime: %v", err)
+		t.Fatalf("Failed to initialize ThunderID runtime: %v", err)
 	}
 	t.Cleanup(config.ResetThunderRuntime)
 

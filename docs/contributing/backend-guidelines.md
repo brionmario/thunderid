@@ -1,6 +1,6 @@
 # Backend Coding Guidelines
 
-Go backend guidelines for the Thunder project.
+Go backend guidelines for the ThunderID project.
 
 ## Tech Stack
 

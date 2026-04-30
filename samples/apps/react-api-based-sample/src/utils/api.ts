@@ -171,7 +171,7 @@ export interface ApiError {
 
 /**
  * Sends an SMS OTP to the user's mobile number
- * @param senderId - The notification sender ID configured in Thunder
+ * @param senderId - The notification sender ID configured in ThunderID
  * @param recipient - The mobile number to send OTP to (e.g., +1234567890)
  * @returns Promise with session token for OTP verification
  */

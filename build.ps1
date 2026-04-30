@@ -57,7 +57,7 @@ $TestPackage = $positionalArgs[4]
 
 $skipConsent = $WithoutConsent.IsPresent -or $withoutConsentFromArgs -or ($env:WITHOUT_CONSENT -eq "true")
 
-$PRODUCT_NAME = "Thunder"
+$PRODUCT_NAME = "ThunderID"
 $PRODUCT_NAME_LOWERCASE = $PRODUCT_NAME.ToLower()
 
 # Check for PowerShell Version Compatibility

@@ -22,7 +22,7 @@ param(
     [string]$ConsoleRedirectUris = ""
 )
 
-$PRODUCT_NAME = "Thunder"
+$PRODUCT_NAME = "ThunderID"
 
 # Check for PowerShell Version Compatibility
 if ($PSVersionTable.PSVersion.Major -lt 7) {

@@ -1,7 +1,7 @@
 {
   "name": "@thunder/configure-users",
   "version": "0.0.0",
-  "description": "Users feature for ⚡️ Thunder applications",
+  "description": "Users feature for ⚡️ ThunderID applications",
   "keywords": [
     "thunder",
     "admin",

@@ -17,7 +17,7 @@
 apiVersion: v2
 name: thunder-oc-componenttype
 description: |
-  ComponentType definition for the Thunder Identity Provider.
+  ComponentType definition for the ThunderID Identity Provider.
   Install this once per cluster (or namespace) to register the thunder
   component type. The thunder-component chart depends on this type being present.
 type: application

@@ -43,7 +43,7 @@ permissions:
 
 env:
   GOFLAGS: "-mod=readonly"
-  PRODUCT_NAME: "Thunder"
+  PRODUCT_NAME: "ThunderID"
   PRODUCT_NAME_LOWER: "thunder"
   RELEASE_BRANCH: "release"
   RELEASE_GIT_USER_NAME: "thunder-automation-bot"

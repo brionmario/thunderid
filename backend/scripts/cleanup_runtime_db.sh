@@ -368,7 +368,7 @@ cleanup_all_tables() {
 
 main() {
   echo "============================================"
-  echo "Thunder Runtime Database Cleanup"
+  echo "ThunderID Runtime Database Cleanup"
   echo "$(date '+%Y-%m-%d %H:%M:%S')"
   echo "============================================"
   echo ""

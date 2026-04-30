@@ -9,7 +9,7 @@ reviews:
   path_instructions:
     - path: "**/*.go"
       instructions: |
-        Scan for hardcoded occurrences of the string literals `Thunder` or `ThunderID` in this file.
+        Scan for hardcoded occurrences of the string literals `ThunderID` or `ThunderID` in this file.
         For each occurrence, flag it and ask: **"Is this hardcoded brand name intentional?"**
         If it can be replaced, suggest using a named constant or a value sourced from runtime config
         (e.g., an environment variable or a config struct field) rather than a raw string literal.
@@ -37,7 +37,7 @@ reviews:
 
     - path: "**/*.ts"
       instructions: |
-        Scan for hardcoded occurrences of the string literals `Thunder` or `ThunderID` in this file.
+        Scan for hardcoded occurrences of the string literals `ThunderID` or `ThunderID` in this file.
         For each occurrence, flag it and ask: **"Is this hardcoded brand name intentional?"**
         If it can be replaced, suggest reading the value from the app's config system using the
         `useConfig` hook (e.g., `const { productName } = useConfig();`) rather than a raw string literal.
@@ -45,7 +45,7 @@ reviews:
 
     - path: "**/*.tsx"
       instructions: |
-        Scan for hardcoded occurrences of the string literals `Thunder` or `ThunderID` in this file.
+        Scan for hardcoded occurrences of the string literals `ThunderID` or `ThunderID` in this file.
         For each occurrence, flag it and ask: **"Is this hardcoded brand name intentional?"**
         If it can be replaced, suggest reading the value from the app's config system using the
         `useConfig` hook (e.g., `const { productName } = useConfig();`) rather than a raw string literal.
@@ -54,7 +54,7 @@ reviews:
 
     - path: "docs/**"
       instructions: |
-        Scan for hardcoded occurrences of the string literals `Thunder` or `ThunderID` in prose, headings,
+        Scan for hardcoded occurrences of the string literals `ThunderID` or `ThunderID` in prose, headings,
         code callouts, or link text.
         For each occurrence, flag it and ask: **"Is this hardcoded brand name intentional?"**
         If it refers to the product name, suggest replacing it with the `<ProductName />` MDX component.

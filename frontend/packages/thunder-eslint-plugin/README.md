@@ -1,6 +1,6 @@
 # @thunder/eslint-plugin
 
-ESLint plugin for ⚡️ Thunder projects with custom rules and configurations.
+ESLint plugin for ⚡️ ThunderID projects with custom rules and configurations.
 
 ## Installation
 
@@ -38,7 +38,7 @@ export default [
 
 #### `recommended`
 
-General rules for all Thunder frontend projects:
+General rules for all ThunderID frontend projects:
 
 - `@thunder/copyright-header`: Enforces WSO2 Apache 2.0 copyright headers
 - `@thunder/no-internal-imports`: Prevents importing from internal paths

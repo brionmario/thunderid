@@ -37,7 +37,7 @@ const (
 	passkeyAuthStartEndpoint      = "/auth/passkey/start"
 	passkeyAuthFinishEndpoint     = "/auth/passkey/finish"
 	testRelyingPartyID            = "localhost"
-	testRelyingPartyName          = "Thunder Test"
+	testRelyingPartyName          = "ThunderID Test"
 )
 
 var (

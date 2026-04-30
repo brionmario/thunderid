@@ -20,8 +20,8 @@ kind: Component
 metadata:
   name: {{ .Values.componentName }}
   annotations:
-    openchoreo.dev/description: "Thunder Identity Management Service"
-    openchoreo.dev/display-name: "Thunder"
+    openchoreo.dev/description: "ThunderID Identity Management Service"
+    openchoreo.dev/display-name: "ThunderID"
 spec:
   owner:
     projectName: {{ .Values.project.name }}
@@ -93,6 +93,6 @@ spec:
     api:
       type: HTTP
       port: {{ .Values.thunder.server.port }}
-      displayName: "Thunder API"
+      displayName: "ThunderID API"
       visibility:
         - external

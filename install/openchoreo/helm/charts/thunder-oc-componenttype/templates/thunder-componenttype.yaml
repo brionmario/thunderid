@@ -20,8 +20,8 @@ kind: {{ if .Values.componentType.cluster }}ClusterComponentType{{ else }}Compon
 metadata:
   name: thunder
   annotations:
-    openchoreo.dev/description: "Thunder ComponentType"
-    openchoreo.dev/display-name: "Thunder"
+    openchoreo.dev/description: "ThunderID ComponentType"
+    openchoreo.dev/display-name: "ThunderID"
 spec:
   workloadType: deployment
 
@@ -76,7 +76,7 @@ spec:
         gateClientHostname:
           type: string
           default: ""
-        # Infra resource configuration for the Thunder deployment container.
+        # Infra resource configuration for the ThunderID deployment container.
         resourceRequestsCpu:
           type: string
           default: "100m"
@@ -388,7 +388,7 @@ spec:
                         echo "Waiting for setup job to complete..."
                         sleep 2
                       done
-                      echo "Setup complete, starting Thunder..."
+                      echo "Setup complete, starting ThunderID..."
                   volumeMounts:
                     - name: sqlite-data
                       mountPath: /opt/thunder/repository/database

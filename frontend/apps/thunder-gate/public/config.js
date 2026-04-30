@@ -18,7 +18,7 @@
 
 window.__THUNDER_RUNTIME_CONFIG__ = {
   brand: {
-    product_name: 'Thunder',
+    product_name: 'ThunderID',
   },
   client: {
     base: '/gate',

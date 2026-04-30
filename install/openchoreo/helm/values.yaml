@@ -45,12 +45,12 @@ thunder-component:
   pipelineName: identity-platform-pipeline  # Must match an existing DeploymentPipeline or set pipeline.create: true
 
   image:
-    repository: ghcr.io/asgardeo/thunder  # Thunder container image repository
+    repository: ghcr.io/asgardeo/thunder  # ThunderID container image repository
     tag: "latest"                          # Use a specific version tag in production
 
   thunder:
     server:
-      port: 8090  # Port Thunder listens on inside the container
+      port: 8090  # Port ThunderID listens on inside the container
 
   # ── Database ─────────────────────────────────────────────────────────────────
   database:
@@ -60,7 +60,7 @@ thunder-component:
     type: sqlite
 
     # ── SQLite (used when type: sqlite) ──────────────────────────────────────
-    # Paths are relative to the Thunder working directory inside the container.
+    # Paths are relative to the ThunderID working directory inside the container.
     storageSize: "1Gi"  # PVC size for SQLite database files
     config:
       sqlite:
@@ -132,7 +132,7 @@ thunder-component:
     clientId: "CONSOLE"
     scopes: '["openid", "profile", "email", "system"]'
 
-  serverPublicUrl: "<SERVER_PUBLIC_URL>"  # Thunder's externally accessible URL
+  serverPublicUrl: "<SERVER_PUBLIC_URL>"  # ThunderID's externally accessible URL
 
   consent:
     enabled: false
@@ -169,7 +169,7 @@ thunder-component:
   project:
     create: true   # false → reuse an existing OpenChoreo Project
     name: identity-platform
-    description: "Identity platform powered by Thunder"
+    description: "Identity platform powered by ThunderID"
     displayName: "Identity Platform"
 
   pipeline:

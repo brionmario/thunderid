@@ -23,13 +23,13 @@ pipelineName: identity-platform-pipeline  # DeploymentPipeline name (must exist 
 
 # Container image configuration
 image:
-  repository: ghcr.io/asgardeo/thunder  # Thunder container image repository
+  repository: ghcr.io/asgardeo/thunder  # ThunderID container image repository
   tag: "latest"                          # Use a specific version tag in production
 
-# Thunder server configuration
+# ThunderID server configuration
 thunder:
   server:
-    port: 8090  # Port Thunder listens on inside the container
+    port: 8090  # Port ThunderID listens on inside the container
 
 # ── Database ──────────────────────────────────────────────────────────────────
 # NOTE: Replace all placeholder values (e.g. <DB_HOST>) before deploying to production.
@@ -40,7 +40,7 @@ database:
   type: sqlite
 
   # ── SQLite (used when type: sqlite) ────────────────────────────────────────
-  # Paths are relative to the Thunder working directory inside the container.
+  # Paths are relative to the ThunderID working directory inside the container.
   # A PVC of `storageSize` is always provisioned — used for SQLite data files and
   # the setup-job completion marker (.setup-complete) regardless of dbType.
   storageSize: "1Gi"  # PVC size
@@ -103,20 +103,20 @@ cors:
     - "https://localhost:3000"
 
 # ── Gate and Console ──────────────────────────────────────────────────────────
-# Gate is the Thunder API gateway frontend.
+# Gate is the ThunderID API gateway frontend.
 gate:
   hostname: <GATE_HOSTNAME>   # Hostname used in the development ReleaseBinding environmentConfigs
   port: 19080
   scheme: http
   clientBase: "/gate"         # Gate frontend base path (frozen as a parameter at release time)
 
-# Console is the Thunder admin console frontend.
+# Console is the ThunderID admin console frontend.
 console:
   clientBase: "/console"
   clientId: "CONSOLE"
   scopes: '["openid", "profile", "email", "system"]'
 
-# Thunder's externally accessible URL — used in Gate and Console config.js and server config.
+# ThunderID's externally accessible URL — used in Gate and Console config.js and server config.
 serverPublicUrl: "<SERVER_PUBLIC_URL>"
 
 # Consent server integration (disabled by default).
@@ -163,7 +163,7 @@ project:
   # Set false if this component shares a project that already exists.
   create: true
   name: identity-platform 
-  description: "Identity platform powered by Thunder"
+  description: "Identity platform powered by ThunderID"
   displayName: "Identity Platform"
 
 pipeline:

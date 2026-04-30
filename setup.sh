@@ -38,7 +38,7 @@ fi
 set -e
 
 # Default settings
-PRODUCT_NAME="Thunder"
+PRODUCT_NAME="ThunderID"
 PRODUCT_NAME_LOWERCASE="$(echo "$PRODUCT_NAME" | tr '[:upper:]' '[:lower:]')"
 BINARY_NAME="${PRODUCT_NAME_LOWERCASE}"
 DEBUG_PORT=${DEBUG_PORT:-2345}

@@ -30,8 +30,8 @@ import (
 func RegisterTools(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "thunder_integrate_react_sdk",
-		Description: "Provides instructions and code snippets for integrating Thunder authentication via the " +
-			"Asgardeo React SDK into a React application. Supports two modes: Mode 1 (default) - Thunder-hosted " +
+		Description: "Provides instructions and code snippets for integrating ThunderID authentication via the " +
+			"Asgardeo React SDK into a React application. Supports two modes: Mode 1 (default) - ThunderID-hosted " +
 			"login pages with redirect-based OAuth 2.0/OIDC flow. Mode 2 - Self-hosted login pages using Flow API " +
 			"or direct API calls for custom authentication UI.",
 		Annotations: &mcp.ToolAnnotations{
@@ -48,13 +48,13 @@ func integrateReactSDK(
 	input integrateReactSDKInput,
 ) (*mcp.CallToolResult, integrateReactSDKOutput, error) {
 	rawInstructions := `
-# Thunder Authentication – React Integration Instructions
+# ThunderID Authentication – React Integration Instructions
 
 ## Two Integration Modes
 
-Thunder supports two ways to integrate React authentication:
+ThunderID supports two ways to integrate React authentication:
 
-- **Mode 1 (Default - Recommended)**: Thunder-hosted login pages with redirect-based
+- **Mode 1 (Default - Recommended)**: ThunderID-hosted login pages with redirect-based
   OAuth 2.0/OIDC flow using the Asgardeo React SDK. Minimal configuration,
   recommended for most use cases.
 - **Mode 2**: Self-hosted custom login pages using direct API calls or flow
@@ -62,16 +62,16 @@ Thunder supports two ways to integrate React authentication:
   API-Based Sample for implementation details.
 
 This guide covers both integration modes:
-- **Mode 1** (default): Thunder-hosted login with redirect-based OAuth 2.0/OIDC.
+- **Mode 1** (default): ThunderID-hosted login with redirect-based OAuth 2.0/OIDC.
 - **Mode 2**: Self-hosted app-native login using alternate API-driven patterns.
 
 Mode 1 remains the recommended default path and uses the **Asgardeo React SDK**
 for a minimal, declarative authentication flow.
 
 ## Project Context
-This project is a **React application** that integrates **Thunder
+This project is a **React application** that integrates **ThunderID
 authentication** using the **Asgardeo React SDK**, covering both
-Thunder-hosted login (Mode 1) and app-native/self-hosted flows (Mode 2).
+ThunderID-hosted login (Mode 1) and app-native/self-hosted flows (Mode 2).
 
 The goal is to demonstrate a **minimal, declarative authentication flow** with minimal setup.
 
@@ -82,8 +82,8 @@ This project intentionally avoids custom logic, hooks, and advanced configuratio
 ## SDK & Platform
 - **SDK**: @asgardeo/react
 - **Platform**: AsgardeoV2
-- **Authentication Mode**: Thunder-hosted login (redirect-based)
-- **Base URL**: https://localhost:8090 (or Thunder instance URL)
+- **Authentication Mode**: ThunderID-hosted login (redirect-based)
+- **Base URL**: https://localhost:8090 (or ThunderID instance URL)
 - **Client ID**: <CREATED_APP'S_CLIENT_ID>
 
 ---
@@ -427,7 +427,7 @@ function App() {
   return (
     <div className="app">
       <header>
-        <h1>Thunder Auth Demo</h1>
+        <h1>ThunderID Auth Demo</h1>
         <Loading>
           <div>Loading...</div>
         </Loading>
@@ -468,15 +468,15 @@ export default App
 
 ---
 
-## Method 2: Thunder App Native Authentication with React (Vite)
+## Method 2: ThunderID App Native Authentication with React (Vite)
 
-This guide shows how to integrate Thunder App Native authentication into a React
+This guide shows how to integrate ThunderID App Native authentication into a React
 app using ~@asgardeo/react~, based on this sample project.
 
 ### Prerequisites
 
-- A Thunder application already created.
-- Your Thunder **Application ID (UUID)**.
+- A ThunderID application already created.
+- Your ThunderID **Application ID (UUID)**.
 - Node.js and npm installed.
 
 ### 1) Create a new Vite project (or use existing)
@@ -521,7 +521,7 @@ createRoot(document.getElementById('root')).render(
 );
 ~~~
 
-Replace ~<THUNDER_APP_ID>~ with your real application UUID from Thunder.
+Replace ~<THUNDER_APP_ID>~ with your real application UUID from ThunderID.
 
 ### 4) Add Sign-In UI
 
@@ -577,7 +577,7 @@ Then use them in ~src/main.jsx~:
 
 #### ✅ Do
 
-- Do replace ~<THUNDER_APP_ID>~ with the exact UUID from your Thunder app registration.
+- Do replace ~<THUNDER_APP_ID>~ with the exact UUID from your ThunderID app registration.
 - Do keep auth settings (~baseUrl~, app ID) environment-specific (dev/stage/prod).
 - Do keep ~AsgardeoProvider~ high in the component tree (usually in ~src/main.jsx~).
 - Do validate the ~baseUrl~ and cert setup when running locally over HTTPS.
@@ -594,7 +594,7 @@ Then use them in ~src/main.jsx~:
 ### Quick troubleshooting
 
 - **Sign-in not starting:** Verify ~applicationId~ and ~baseUrl~.
-- **Invalid app/client errors:** Re-check the Thunder app registration and copied UUID.
+- **Invalid app/client errors:** Re-check the ThunderID app registration and copied UUID.
 - **Local HTTPS issues:** Confirm your local endpoint and certificate trust setup.
 
 ---
@@ -605,7 +605,7 @@ For complete implementation examples of Method 2 authentication, refer to:
   - App-native authentication using Flow Orchestration API
   - Standard OAuth 2.0 / OIDC with custom UI
 
-Both samples show how to build custom authentication UIs while leveraging Thunder's authentication capabilities.
+Both samples show how to build custom authentication UIs while leveraging ThunderID's authentication capabilities.
 
 ---
 
@@ -694,7 +694,7 @@ function App() {
 **Solution:** Ensure authentication has completed. Check for any errors in the console.
 
 ### Issue: CORS errors
-**Solution:** Configure CORS settings in Thunder/Asgardeo to allow your app's origin.
+**Solution:** Configure CORS settings in ThunderID/Asgardeo to allow your app's origin.
 
 ---
 

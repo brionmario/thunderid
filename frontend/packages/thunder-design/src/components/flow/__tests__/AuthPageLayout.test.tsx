@@ -76,14 +76,14 @@ describe('AuthPageLayout', () => {
       expect(main.classList.contains('ThunderSignIn--root')).toBe(true);
     });
 
-    it('does not apply Thunder CSS class when variant is not provided', () => {
+    it('does not apply ThunderID CSS class when variant is not provided', () => {
       renderWithProviders(
         <AuthPageLayout isLoading={false}>
           <span>Content</span>
         </AuthPageLayout>,
       );
       const main = screen.getByRole('main');
-      const thunderClasses = Array.from(main.classList).filter((c) => c.startsWith('Thunder'));
+      const thunderClasses = Array.from(main.classList).filter((c) => c.startsWith('ThunderID'));
       expect(thunderClasses).toHaveLength(0);
     });
   });

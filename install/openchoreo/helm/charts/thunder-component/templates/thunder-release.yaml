@@ -86,7 +86,7 @@ spec:
           value: {{ .Values.crypto.encryption.key | quote }}
     endpoints:
       api:
-        displayName: Thunder API
+        displayName: ThunderID API
         port: 8090
         type: HTTP
         visibility:

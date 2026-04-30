@@ -1,13 +1,13 @@
 # @thunder/i18n
 
-Internationalization (i18n) package for Thunder applications using react-i18next with full TypeScript support.
+Internationalization (i18n) package for ThunderID applications using react-i18next with full TypeScript support.
 
 ## Features
 
 - **Type-safe translations** - Full TypeScript support with autocomplete
 - **React hooks** - Easy-to-use hooks for translations
 - **Namespace organization** - Organized by app and feature for better maintainability
-- **Multiple apps support** - Shared translations for console, gate, and other Thunder apps
+- **Multiple apps support** - Shared translations for console, gate, and other ThunderID apps
 
 ## Installation
 
@@ -162,7 +162,7 @@ const translations = {
 
 ### Namespace Details
 
-**`common`** - Shared translations across all Thunder applications:
+**`common`** - Shared translations across all ThunderID applications:
 
 - `actions` - Action buttons (save, cancel, delete, etc.)
 - `status` - Status messages (loading, success, error, etc.)
@@ -188,15 +188,15 @@ const translations = {
 
 **`dashboard`** - Dashboard-specific content
 
-**`auth`** - Authentication flows (for Thunder Gate):
+**`auth`** - Authentication flows (for ThunderID Gate):
 
 - Sign in, sign up, password flows
 
-**`mfa`** - Multi-factor authentication (for Thunder Gate)
+**`mfa`** - Multi-factor authentication (for ThunderID Gate)
 
-**`social`** - Social login providers (for Thunder Gate)
+**`social`** - Social login providers (for ThunderID Gate)
 
-**`consent`** - Consent management (for Thunder Gate)
+**`consent`** - Consent management (for ThunderID Gate)
 
 **`errors`** - Error messages and error states
 
@@ -209,7 +209,7 @@ const translations = {
 
 ## Usage Examples
 
-### Example: Thunder Console - Users Page
+### Example: ThunderID Console - Users Page
 
 ```tsx
 import {useTranslation} from 'react-i18next';
@@ -241,7 +241,7 @@ export function UsersPage() {
 }
 ```
 
-### Example: Thunder Gate - Sign In Page
+### Example: ThunderID Gate - Sign In Page
 
 ```tsx
 import {useTranslation} from 'react-i18next';
@@ -423,7 +423,7 @@ pnpm lint
 
 ## Integration Guide
 
-### Thunder Console App
+### ThunderID Console App
 
 Complete integration example for `apps/thunder-console/src/main.tsx`:
 
@@ -459,7 +459,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 );
 ```
 
-### Thunder Gate App
+### ThunderID Gate App
 
 Similar integration for `apps/thunder-gate/src/main.tsx`:
 
@@ -644,7 +644,7 @@ When adding support for additional languages:
 2. Translate all namespaces
 3. Update `package.json` exports
 4. Update this README with the new language
-5. Test in all Thunder applications
+5. Test in all ThunderID applications
 
 ## Resources
 

@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "⚡ Thunder API",
-    "description": "Complete API collection for Thunder identity and access management.",
+    "name": "⚡ ThunderID API",
+    "description": "Complete API collection for ThunderID identity and access management.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [

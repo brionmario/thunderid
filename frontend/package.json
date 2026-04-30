@@ -2,7 +2,7 @@
   "private": true,
   "name": "@thunder/frontend",
   "version": "0.0.0",
-  "description": "Frontend workspace for ⚡️ Thunder",
+  "description": "Frontend workspace for ⚡️ ThunderID",
   "author": "WSO2",
   "license": "Apache-2.0",
   "type": "module",
