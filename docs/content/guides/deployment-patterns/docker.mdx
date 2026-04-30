@@ -33,7 +33,7 @@ docker run hello-world
 ### Step 1: Pull the Image
 
 ```bash
-docker pull ghcr.io/asgardeo/thunder:latest
+docker pull ghcr.io/asgardeo/thunderid:latest
 ```
 
 ### Step 2: Set Up the Server
@@ -42,7 +42,7 @@ Run the one-time setup script before starting <ProductName /> for the first time
 
 ```bash
 docker run -it --rm \
-  ghcr.io/asgardeo/thunder:latest \
+  ghcr.io/asgardeo/thunderid:latest \
   ./setup.sh
 ```
 
@@ -53,7 +53,7 @@ The container exits after setup completes. If you are using SQLite as the databa
 ```bash
 docker run --rm \
   -p 8090:8090 \
-  ghcr.io/asgardeo/thunder:latest
+  ghcr.io/asgardeo/thunderid:latest
 ```
 
 <ProductName /> is now running at `https://localhost:8090`.
@@ -65,8 +65,8 @@ To override the default server configuration, mount a custom `deployment.yaml` f
 ```bash
 docker run --rm \
   -p 8090:8090 \
-  -v $(pwd)/deployment.yaml:/opt/thunder/repository/conf/deployment.yaml \
-  ghcr.io/asgardeo/thunder:latest
+  -v $(pwd)/deployment.yaml:/opt/thunderid/repository/conf/deployment.yaml \
+  ghcr.io/asgardeo/thunderid:latest
 ```
 
 To also use custom TLS certificates, mount them alongside the configuration:
@@ -74,10 +74,10 @@ To also use custom TLS certificates, mount them alongside the configuration:
 ```bash
 docker run --rm \
   -p 8090:8090 \
-  -v $(pwd)/deployment.yaml:/opt/thunder/repository/conf/deployment.yaml \
-  -v $(pwd)/certs/server.cert:/opt/thunder/repository/resources/security/server.cert \
-  -v $(pwd)/certs/server.key:/opt/thunder/repository/resources/security/server.key \
-  ghcr.io/asgardeo/thunder:latest
+  -v $(pwd)/deployment.yaml:/opt/thunderid/repository/conf/deployment.yaml \
+  -v $(pwd)/certs/server.cert:/opt/thunderid/repository/resources/security/server.cert \
+  -v $(pwd)/certs/server.key:/opt/thunderid/repository/resources/security/server.key \
+  ghcr.io/asgardeo/thunderid:latest
 ```
 
 ## Access <ProductName />

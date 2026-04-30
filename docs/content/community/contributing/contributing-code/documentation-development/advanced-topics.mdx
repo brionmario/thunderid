@@ -261,7 +261,7 @@ themeConfig: {
   algolia: {
     appId: 'YOUR_APP_ID',
     apiKey: 'YOUR_SEARCH_API_KEY',
-    indexName: 'thunder',
+    indexName: 'thunderid',
   },
 },
 ```
@@ -389,7 +389,7 @@ For production sites, use Algolia DocSearch:
 algolia: {
   appId: 'YOUR_APP_ID',
   apiKey: 'YOUR_SEARCH_API_KEY',
-  indexName: 'thunder',
+  indexName: 'thunderid',
   contextualSearch: true,
   searchParameters: {},
   searchPagePath: 'search',
@@ -570,8 +570,8 @@ CMD ["nginx", "-g", "daemon off;"]
 Build and run:
 
 ```bash
-docker build -f Dockerfile.docs -t thunder-docs .
-docker run -p 8080:80 thunder-docs
+docker build -f Dockerfile.docs -t thunderid-docs .
+docker run -p 8080:80 thunderid-docs
 ```
 
 ## Performance Optimization

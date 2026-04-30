@@ -78,7 +78,7 @@ make test_integration WITHOUT_CONSENT=true
 
 **Using Docker**
 ```bash
-docker build --build-arg WITH_CONSENT=false -t thunder:latest .
+docker build --build-arg WITH_CONSENT=false -t thunderid:latest .
 ```
 
 :::note
@@ -103,7 +103,7 @@ make run WITHOUT_CONSENT=true
 
 **Docker (environment variable)**
 ```bash
-docker run -e WITH_CONSENT=false thunder:latest
+docker run -e WITH_CONSENT=false thunderid:latest
 ```
 :::
 

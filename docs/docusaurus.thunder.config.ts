@@ -83,7 +83,7 @@ const docusaurusThunderConfig = {
   },
   postman: {
     collection: {
-      output: 'thunder-api-postman-collection.json',
+      output: 'thunderid-api-postman-collection.json',
     },
   },
   documentation: {
@@ -92,10 +92,10 @@ const docusaurusThunderConfig = {
     },
     deployment: {
       production: {
-        baseUrl: 'thunder',
+        baseUrl: 'thunderid',
         // TODO: Docusaurus doesn't seem to allow subpaths in the URL yet.
         // Can't use the GitHub pages URL until then.
-        url: 'https://thunder.dev',
+        url: 'https://thunderid.dev',
       },
     },
   },

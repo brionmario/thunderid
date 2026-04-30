@@ -22,7 +22,7 @@ import {LoggerProvider, LogLevel} from '@thunder/logger/react';
 import { useLocation } from '@docusaurus/router';
 import {applyPersona, PERSONAS, type Persona} from './NavbarItem/PersonaDropdown';
 
-const PERSONA_STORAGE_KEY = 'thunder-docs-persona';
+const PERSONA_STORAGE_KEY = 'thunderid-docs-persona';
 
 export default function Root({children = null}: PropsWithChildren<Record<string, unknown>>) {
   const location = useLocation();

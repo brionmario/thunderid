@@ -148,7 +148,7 @@ Stores runtime data like sessions, tokens, and temporary data. The runtime datab
 | `database.runtime.redis.username` | `""` | Redis ACL username — leave empty if ACLs are not configured |
 | `database.runtime.redis.password` | `""` | Redis password or ACL user password |
 | `database.runtime.redis.db` | `0` | Redis logical database index (0–15) |
-| `database.runtime.redis.key_prefix` | `""` | Prefix applied to all Redis keys written by <ProductName />, for example `thunder:` |
+| `database.runtime.redis.key_prefix` | `""` | Prefix applied to all Redis keys written by <ProductName />, for example `thunderid:` |
 | `database.runtime.redis.max_retries` | `5` | Maximum retry attempts for transient Redis network and timeout issues |
 | `database.runtime.redis.min_retry_backoff_ms` | `10` | Minimum delay before Redis retries in milliseconds |
 | `database.runtime.redis.max_retry_backoff_ms` | `100` | Maximum delay before Redis retries in milliseconds |
@@ -229,7 +229,7 @@ Stores user profiles and credentials.
 | `cache.redis.username` | `""` | Redis username |
 | `cache.redis.password` | `""` | Redis password |
 | `cache.redis.db` | `0` | Redis database index |
-| `cache.redis.key_prefix` | `thunder` | Prefix added to all Redis cache keys |
+| `cache.redis.key_prefix` | `thunderid` | Prefix added to all Redis cache keys |
 | `cache.redis.max_retries` | `5` | Maximum retry attempts for transient Redis network and timeout issues |
 | `cache.redis.min_retry_backoff_ms` | `10` | Minimum delay before Redis retries in milliseconds |
 | `cache.redis.max_retry_backoff_ms` | `100` | Maximum delay before Redis retries in milliseconds |
@@ -289,7 +289,7 @@ cache:
     username: ""
     password: ""
     db: 0
-    key_prefix: "thunder"
+    key_prefix: "thunderid"
     max_retries: 5
     min_retry_backoff_ms: 10
     max_retry_backoff_ms: 100
@@ -367,12 +367,12 @@ Example Helm values:
 ```yaml
 declarativeResources:
   enabled: true
-  # Base mount path inside the ThunderID container (default: /opt/thunder/repository/resources)
-  mountPath: /opt/thunder/repository/resources
+  # Base mount path inside the ThunderID container (default: /opt/thunderid/repository/resources)
+  mountPath: /opt/thunderid/repository/resources
   # Mount as read-only (recommended)
   readOnly: true
   configMap:
-    name: thunder-declarative-resources
+    name: thunderid-declarative-resources
     items:
       # Format 1 — string shorthand: key and path are the same
       - "identity_providers/google.yaml"
@@ -382,7 +382,7 @@ declarativeResources:
       # Format 3 — per-item mountPath override (absolute path)
       - key: org-default
         path: organization_units/default.yaml
-        mountPath: /opt/thunder/repository/resources/organization_units/default.yaml
+        mountPath: /opt/thunderid/repository/resources/organization_units/default.yaml
 ```
 
 To source files from a Kubernetes Secret instead (for resources containing sensitive values):
@@ -390,10 +390,10 @@ To source files from a Kubernetes Secret instead (for resources containing sensi
 ```yaml
 declarativeResources:
   enabled: true
-  mountPath: /opt/thunder/repository/resources
+  mountPath: /opt/thunderid/repository/resources
   readOnly: true
   secret:
-    name: thunder-declarative-resources-secret
+    name: thunderid-declarative-resources-secret
     items:
       - key: my-app-with-secrets
         path: applications/my-app.yaml

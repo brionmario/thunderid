@@ -52,7 +52,7 @@ export DB_PASS="<your-database-password>"
 Clone the <ProductName /> repository if you have not already done so. Then install <ProductName /> using the OpenChoreo Helm chart:
 
 ```bash
-helm install thunder install/openchoreo/helm/ \
+helm install thunderid install/openchoreo/helm/ \
   --namespace identity-platform \
   --create-namespace \
   --set database.host="$DB_HOST" \
@@ -83,7 +83,7 @@ kubectl get organizations,projects,deploymentpipelines,environments
 Pass configuration values directly on the command line:
 
 ```bash
-helm upgrade --install thunder install/openchoreo/helm/ \
+helm upgrade --install thunderid install/openchoreo/helm/ \
   --namespace identity-platform \
   --create-namespace \
   --set database.host="postgres.example.com" \
@@ -109,7 +109,7 @@ For a repeatable deployment, use a values file:
 
     # Container image configuration
     image:
-      repository: ghcr.io/asgardeo/thunder
+      repository: ghcr.io/asgardeo/thunderid
       tag: "0.11.0"
 
     # Database configuration
@@ -182,7 +182,7 @@ For a repeatable deployment, use a values file:
 2. Install using the values file:
 
     ```bash
-    helm upgrade --install thunder install/openchoreo/helm/ \
+    helm upgrade --install thunderid install/openchoreo/helm/ \
       --namespace identity-platform \
       --create-namespace \
       -f custom-values.yaml

@@ -15,7 +15,7 @@ The MCP server is available at the `/mcp` endpoint on your <ProductName /> insta
 
 ### Authentication
 
-The MCP endpoint is secured with OAuth 2.0 Bearer Token authentication following the [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). Clients must present a valid JWT access token with the `system` scope. <ProductName /> validates the token signature, issuer, audience (set to the MCP server URL), and expiry. See [Step 3](#step-3-add-thunder-mcp-server-to-vs-code) for setup instructions.
+The MCP endpoint is secured with OAuth 2.0 Bearer Token authentication following the [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). Clients must present a valid JWT access token with the `system` scope. <ProductName /> validates the token signature, issuer, audience (set to the MCP server URL), and expiry. See [Step 3](#step-3-add-thunderid-mcp-server-to-vs-code) for setup instructions.
 
 ## Available Tools
 
@@ -50,7 +50,7 @@ The MCP endpoint is secured with OAuth 2.0 Bearer Token authentication following
 
 - <ProductName /> server running (default: `https://localhost:8090`)
 - VS Code with MCP support (or another MCP-compatible client)
-- Choose an authentication approach — see [Step 3](#step-3-add-thunder-mcp-server-to-vs-code) for detailed setup:
+- Choose an authentication approach — see [Step 3](#step-3-add-thunderid-mcp-server-to-vs-code) for detailed setup:
   - **Option A**: Standard MCP authorization flow using DCR (recommended)
   - **Option B**: Client credentials with a pre-registered application
 
@@ -83,7 +83,7 @@ This approach follows the MCP Authorization Specification. The MCP client handle
    ```json
    {
      "servers": {
-       "thunder-mcp": {
+       "thunderid-mcp": {
          "url": "https://localhost:8090/mcp",
          "type": "http"
        }
@@ -135,7 +135,7 @@ If you prefer not to enable open DCR, you can pre-register an application and us
    ```json
    {
      "servers": {
-       "thunder-mcp": {
+       "thunderid-mcp": {
          "url": "https://localhost:8090/mcp",
          "type": "http",
          "headers": {

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	redisTestKeyPrefix    = "thunder"
+	redisTestKeyPrefix    = "thunderid"
 	redisTestDeploymentID = "test-redis-deployment"
 	redisTestFlowID       = "test-flow-id"
 )

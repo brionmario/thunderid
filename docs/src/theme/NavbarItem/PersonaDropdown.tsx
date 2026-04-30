@@ -21,7 +21,7 @@ import {useActiveDocContext} from '@docusaurus/plugin-content-docs/client';
 
 export type Persona = 'all' | 'app' | 'iam' | 'devops';
 
-const STORAGE_KEY = 'thunder-docs-persona';
+const STORAGE_KEY = 'thunderid-docs-persona';
 
 interface PersonaOption {
   value: Persona;

@@ -46,7 +46,7 @@ interface LoadedContent {
  */
 export default function personaPlugin(): Plugin {
   return {
-    name: 'thunder-persona-plugin',
+    name: 'thunderid-persona-plugin',
 
     async allContentLoaded({
       allContent,

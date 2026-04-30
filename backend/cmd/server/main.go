@@ -147,7 +147,7 @@ func initThunderConfigurations(logger *log.Logger, thunderHome string) *config.C
 
 	// Initialize runtime configurations.
 	if err := config.InitializeThunderRuntime(thunderHome, cfg); err != nil {
-		logger.Fatal("Failed to initialize thunder runtime", log.Error(err))
+		logger.Fatal("Failed to initialize ThunderID runtime", log.Error(err))
 	}
 
 	return cfg

@@ -27,7 +27,7 @@ interface PersonaPluginData {
 }
 
 export default function DocSidebarItemLink(props: OriginalProps): React.ReactElement {
-  const {personaMap} = usePluginData('thunder-persona-plugin') as PersonaPluginData;
+  const {personaMap} = usePluginData('thunderid-persona-plugin') as PersonaPluginData;
   const docId = (props.item as {docId?: string}).docId;
   const persona = docId ? personaMap[docId] : undefined;
 
