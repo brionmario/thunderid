@@ -14,7 +14,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-## Default values for the thunder-component sub-chart.
+## Default values for the thunderid-component sub-chart.
 ## Override via -f my-values.yaml or --set when installing directly.
 
 # ── Core ──────────────────────────────────────────────────────────────────────
@@ -23,7 +23,7 @@ pipelineName: identity-platform-pipeline  # DeploymentPipeline name (must exist 
 
 # Container image configuration
 image:
-  repository: ghcr.io/asgardeo/thunder  # ThunderID container image repository
+  repository: ghcr.io/asgardeo/thunderid  # ThunderID container image repository
   tag: "latest"                          # Use a specific version tag in production
 
 # ThunderID server configuration
@@ -135,7 +135,7 @@ replicas: 1  # Pod replicas for the development environment
 endpointVisibility: "external"
 
 # Whether the ComponentType was installed as cluster-scoped (ClusterComponentType).
-# Must match the componentType.cluster value used when installing thunder-oc-componenttype.
+# Must match the componentType.cluster value used when installing thunderid-oc-componenttype.
 componentType:
   cluster: true
 

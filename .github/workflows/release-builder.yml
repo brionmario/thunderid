@@ -44,7 +44,7 @@ permissions:
 env:
   GOFLAGS: "-mod=readonly"
   PRODUCT_NAME: "ThunderID"
-  PRODUCT_NAME_LOWER: "thunder"
+  PRODUCT_NAME_LOWER: "thunderid"
   RELEASE_BRANCH: "release"
   RELEASE_GIT_USER_NAME: "thunder-automation-bot"
   RELEASE_GIT_USER_EMAIL: "thunder-bot@wso2.com"
@@ -287,7 +287,7 @@ jobs:
         env:
           POSTGRES_USER: dbuser
           POSTGRES_PASSWORD: dbpassword
-          POSTGRES_DB: thunderdb
+          POSTGRES_DB: thunderiddb
         ports:
           - 5432:5432
         options: >-

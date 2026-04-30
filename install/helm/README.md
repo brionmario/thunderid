@@ -504,7 +504,7 @@ Declarative resources can be mounted into ThunderID's `repository/resources` dir
 | Name                                   | Description                                                     | Default                      |
 | -------------------------------------- | --------------------------------------------------------------- | ---------------------------- |
 | `declarativeResources.enabled`         | Enable declarative resources mount                              | `false`                      |
-| `declarativeResources.mountPath`       | Mount path inside container                                     | `/opt/thunder/repository/resources` |
+| `declarativeResources.mountPath`       | Mount path inside container                                     | `/opt/thunderid/repository/resources` |
 | `declarativeResources.readOnly`        | Mount declarative resources as read-only                        | `true`                       |
 | `declarativeResources.configMap.name`  | Existing ConfigMap name containing declarative resources        | `""`                        |
 | `declarativeResources.configMap.items` | ConfigMap items to mount (string or `{key,path}`; empty = all keys) | `[]`                    |
@@ -527,7 +527,7 @@ Example using a ConfigMap:
 ```yaml
 declarativeResources:
   enabled: true
-  mountPath: /opt/thunder/repository/resources
+  mountPath: /opt/thunderid/repository/resources
   configMap:
     name: thunder-declarative-resources
     items:
@@ -557,7 +557,7 @@ Use object format when you need to mount a source key to a different directory/f
 When `items` are provided, the chart mounts declarative resources file-by-file using `subPath`. This preserves existing files already present in ThunderID's `repository/resources` directory.
 
 Resulting file path example:
-- With `path: applications/application1.yaml`, file is mounted at `/opt/thunder/repository/resources/applications/application1.yaml`
+- With `path: applications/application1.yaml`, file is mounted at `/opt/thunderid/repository/resources/applications/application1.yaml`
 
 #### End-to-end example with ConfigMap
 
@@ -575,7 +575,7 @@ Configure Helm values:
 ```yaml
 declarativeResources:
   enabled: true
-  mountPath: /opt/thunder/repository/resources
+  mountPath: /opt/thunderid/repository/resources
   readOnly: true
   configMap:
     name: thunder-declarative-resources
@@ -648,10 +648,10 @@ declarative_resources:
 
 ```bash
 # Check mounted files inside ThunderID pod
-kubectl exec -it deploy/my-thunder -- ls -R /opt/thunder/repository/resources
+kubectl exec -it deploy/my-thunder -- ls -R /opt/thunderid/repository/resources
 
 # Confirm declarative_resources.enabled in generated deployment config
-kubectl exec -it deploy/my-thunder -- grep -n "declarative_resources\|enabled" /opt/thunder/conf/deployment.yaml
+kubectl exec -it deploy/my-thunder -- grep -n "declarative_resources\|enabled" /opt/thunderid/conf/deployment.yaml
 ```
 
 #### Common configuration errors
@@ -718,7 +718,7 @@ Bootstrap scripts extend ThunderID's setup process by adding your own initializa
 
 #### Understanding Default Bootstrap Scripts
 
-ThunderID provides these default bootstrap scripts in `/opt/thunder/bootstrap/`:
+ThunderID provides these default bootstrap scripts in `/opt/thunderid/bootstrap/`:
 - **`common.sh`** - Helper functions for logging (`log_info`, `log_success`, `log_warning`, `log_error`) and API calls (`thunder_api_call`)
 - **`01-default-resources.sh`** - Creates admin user, default organization, and Person user schema
 - **`02-sample-resources.sh`** - Creates sample resources for testing

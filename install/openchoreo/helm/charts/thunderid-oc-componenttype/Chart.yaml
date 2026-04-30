@@ -15,11 +15,10 @@
 # under the License.
 
 apiVersion: v2
-name: thunder-component
+name: thunderid-oc-componenttype
 description: |
-  ThunderID Identity Provider component resources for OpenChoreo.
-  Deploys the Component, Workload, ComponentRelease, ReleaseBinding,
-  and supporting platform resources. Requires the thunder-oc-componenttype
-  chart (or an equivalent ClusterComponentType) to be installed first.
+  ComponentType definition for the ThunderID Identity Provider.
+  Install this once per cluster (or namespace) to register the thunderid
+  component type. The thunderid-component chart depends on this type being present.
 type: application
 version: 0.35.0

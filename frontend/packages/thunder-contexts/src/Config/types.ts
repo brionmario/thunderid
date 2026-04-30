@@ -205,7 +205,7 @@ export interface ThunderConfig {
  * @example
  * ```javascript
  * // In public/config.js
- * window.__THUNDER_RUNTIME_CONFIG__ = {
+ * window.__THUNDERID_RUNTIME_CONFIG__ = {
  *   client: {
  *     client_id: 'CONSOLE'
  *   },
@@ -222,6 +222,6 @@ export interface ThunderConfig {
 declare global {
   interface Window {
     /** Runtime configuration loaded from config.js */
-    __THUNDER_RUNTIME_CONFIG__?: ThunderConfig;
+    __THUNDERID_RUNTIME_CONFIG__?: ThunderConfig;
   }
 }

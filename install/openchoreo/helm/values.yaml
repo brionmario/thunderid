@@ -18,37 +18,37 @@
 ## Each top-level key must match the sub-chart name exactly.
 ##
 ## Install both sub-charts together (default):
-##   helm install thunder .
+##   helm install thunderid .
 ##
 ## Install only the ComponentType (platform admin, once per cluster):
-##   helm install thunder-type charts/thunder-oc-componenttype
+##   helm install thunder-type charts/thunderid-oc-componenttype
 ##
 ## Install only the Component (team, assumes ComponentType already exists):
-##   helm install thunder-app charts/thunder-component -f my-values.yaml
+##   helm install thunder-app charts/thunderid-component -f my-values.yaml
 
 # ─── Sub-chart toggles ────────────────────────────────────────────────────────
 # Set enabled: false to skip a sub-chart when it is already installed separately.
 
-thunder-oc-componenttype:
+thunderid-oc-componenttype:
   enabled: true
   # cluster: true  → creates a ClusterComponentType (cluster-scoped, shared across all projects).
   # cluster: false → creates a namespaced ComponentType in the Helm release namespace.
-  # When changing this, also update thunder-component.componentType.cluster below to match.
+  # When changing this, also update thunderid-component.componentType.cluster below to match.
   componentType:
     cluster: true
 
-thunder-component:
+thunderid-component:
   enabled: true
 
   # ── Core ────────────────────────────────────────────────────────────────────
-  componentName: thunder              # Base name for Component, Workload, Release, and data plane resources
+  componentName: thunderid              # Base name for Component, Workload, Release, and data plane resources
   pipelineName: identity-platform-pipeline  # Must match an existing DeploymentPipeline or set pipeline.create: true
 
   image:
-    repository: ghcr.io/asgardeo/thunder  # ThunderID container image repository
+    repository: ghcr.io/asgardeo/thunderid  # ThunderID container image repository
     tag: "latest"                          # Use a specific version tag in production
 
-  thunder:
+  thunderid:
     server:
       port: 8090  # Port ThunderID listens on inside the container
 
@@ -117,7 +117,7 @@ thunder-component:
 
   cors:
     allowed_origins:
-      - "https://thunder-gate.your-domain.com"
+      - "https://thunderid-gate.your-domain.com"
       - "https://localhost:3000"
 
   # ── Gate and Console ─────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ thunder-component:
 
   replicas: 1                 # Pod replicas for the development environment
 
-  # Must match thunder-oc-componenttype.componentType.cluster above.
+  # Must match thunderid-oc-componenttype.componentType.cluster above.
   # true  → Component references ClusterComponentType
   # false → Component references namespaced ComponentType
   componentType:

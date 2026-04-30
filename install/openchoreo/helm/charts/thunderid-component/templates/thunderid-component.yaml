@@ -54,7 +54,7 @@ spec:
     image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
     env:
       - key: SERVER_PORT
-        value: {{ .Values.thunder.server.port | quote }}
+        value: {{ .Values.thunderid.server.port | quote }}
       - key: JWT_VALIDITY
         value: {{ .Values.jwt.validity | quote }}
       - key: OAUTH_REFRESH_TOKEN_VALIDITY
@@ -92,7 +92,7 @@ spec:
   endpoints:
     api:
       type: HTTP
-      port: {{ .Values.thunder.server.port }}
+      port: {{ .Values.thunderid.server.port }}
       displayName: "ThunderID API"
       visibility:
         - external

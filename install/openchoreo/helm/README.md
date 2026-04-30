@@ -10,30 +10,30 @@ The umbrella chart contains two independent sub-charts:
 
 | Sub-chart | Purpose | Who installs |
 |-----------|---------|--------------|
-| `thunder-oc-componenttype` | Registers the `ClusterComponentType` (or namespace-scoped `ComponentType`) that defines ThunderID's full schema and Kubernetes resource templates | Platform admins — once per cluster |
-| `thunder-component` | Deploys the `Component`, `Workload`, `ComponentRelease`, `ReleaseBinding`, and all platform resources for a ThunderID instance | Teams — once per ThunderID deployment |
+| `thunderid-oc-componenttype` | Registers the `ClusterComponentType` (or namespace-scoped `ComponentType`) that defines ThunderID's full schema and Kubernetes resource templates | Platform admins — once per cluster |
+| `thunderid-component` | Deploys the `Component`, `Workload`, `ComponentRelease`, `ReleaseBinding`, and all platform resources for a ThunderID instance | Teams — once per ThunderID deployment |
 
 Install both together (default):
 ```bash
-helm install thunder .
+helm install thunderid .
 ```
 
 Install each independently:
 ```bash
 # Platform admin: register the ComponentType once
-helm install thunder-type charts/thunder-oc-componenttype
+helm install thunder-type charts/thunderid-oc-componenttype
 
 # Team: deploy a ThunderID instance (ComponentType must already exist)
-helm install thunder-app charts/thunder-component -f my-values.yaml
+helm install thunder-app charts/thunderid-component -f my-values.yaml
 ```
 
 ### OpenChoreo Resource Flow
 
 ```
-thunder-oc-componenttype (ClusterComponentType)
+thunderid-oc-componenttype (ClusterComponentType)
   └── defines: parameters schema, environmentConfigs schema, K8s resource templates
         │
-thunder-component
+thunderid-component
   ├── Component          ← component-level parameters (image, dbType, crypto key, etc.)
   ├── Workload           ← container image + env vars
   ├── ComponentRelease   ← frozen snapshot (post-install hook, weight 0)
@@ -54,11 +54,11 @@ post-install hooks (weight 0 → 1)
         └── OpenChoreo reconciles → data plane namespace
               ├── sqlite-pvc        ← PVC for SQLite data (always created)
               ├── setup-job         ← initialises DB schemas, writes .setup-complete marker
-              ├── thunder-config    ← deployment.yaml ConfigMap (sqlite or postgres variant)
+              ├── thunderid-config    ← deployment.yaml ConfigMap (sqlite or postgres variant)
               ├── gate-config       ← Gate frontend config.js
               ├── console-config    ← Console frontend config.js
               ├── file-config (×N)  ← one ConfigMap per attached configuration file
-              ├── Deployment        ← wait-for-setup init container + thunder container
+              ├── Deployment        ← wait-for-setup init container + thunderid container
               ├── Service           ← ClusterIP on the ThunderID server port
               └── HTTPRoute         ← external ingress (when endpointVisibility: external)
 ```
@@ -87,7 +87,7 @@ post-install hooks (weight 0 → 1)
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `image` | ThunderID container image (`repository:tag`) | `ghcr.io/asgardeo/thunder:latest` |
+| `image` | ThunderID container image (`repository:tag`) | `ghcr.io/asgardeo/thunderid:latest` |
 | `runtime.imagePullPolicy` | Container image pull policy | `Always` |
 | `runtime.dbType` | Database engine: `sqlite` or `postgres` | `sqlite` |
 | `runtime.dbStorageSize` | PVC size for SQLite data files | `1Gi` |
@@ -123,11 +123,11 @@ post-install hooks (weight 0 → 1)
 ### SQLite (Default — No External DB Needed)
 
 ```bash
-helm upgrade --install thunder install/openchoreo/helm/ \
+helm upgrade --install thunderid install/openchoreo/helm/ \
   --namespace identity-platform \
   --create-namespace \
-  --set thunder-component.serverPublicUrl="http://development-thunder-identity-platform.openchoreoapis.localhost:19080" \
-  --set thunder-component.gate.hostname="development-thunder-identity-platform.openchoreoapis.localhost"
+  --set thunderid-component.serverPublicUrl="http://development-thunderid-identity-platform.openchoreoapis.localhost:19080" \
+  --set thunderid-component.gate.hostname="development-thunderid-identity-platform.openchoreoapis.localhost"
 ```
 
 ### PostgreSQL
@@ -136,32 +136,32 @@ helm upgrade --install thunder install/openchoreo/helm/ \
 
    ```bash
    export DB_HOST="postgres.example.com"
-   export DB_NAME="thunderdb"
+   export DB_NAME="thunderiddb"
    export DB_USER="dbuser"
    export DB_PASS="<your-password>"
-   export SERVER_PUBLIC_URL="http://development-thunder-identity-platform.openchoreoapis.localhost:19080"
-   export GATE_HOSTNAME="development-thunder-identity-platform.openchoreoapis.localhost"
+   export SERVER_PUBLIC_URL="http://development-thunderid-identity-platform.openchoreoapis.localhost:19080"
+   export GATE_HOSTNAME="development-thunderid-identity-platform.openchoreoapis.localhost"
    ```
 
 2. **Install the chart**:
 
    ```bash
-   helm upgrade --install thunder install/openchoreo/helm/ \
+   helm upgrade --install thunderid install/openchoreo/helm/ \
      --namespace identity-platform \
      --create-namespace \
-     --set thunder-component.database.type=postgres \
-     --set thunder-component.database.host="$DB_HOST" \
-     --set thunder-component.database.config.database="$DB_NAME" \
-     --set thunder-component.database.config.username="$DB_USER" \
-     --set thunder-component.database.config.password="$DB_PASS" \
-     --set thunder-component.database.runtime.database="$DB_NAME" \
-     --set thunder-component.database.runtime.username="$DB_USER" \
-     --set thunder-component.database.runtime.password="$DB_PASS" \
-     --set thunder-component.database.user.database="$DB_NAME" \
-     --set thunder-component.database.user.username="$DB_USER" \
-     --set thunder-component.database.user.password="$DB_PASS" \
-     --set thunder-component.serverPublicUrl="$SERVER_PUBLIC_URL" \
-     --set thunder-component.gate.hostname="$GATE_HOSTNAME"
+     --set thunderid-component.database.type=postgres \
+     --set thunderid-component.database.host="$DB_HOST" \
+     --set thunderid-component.database.config.database="$DB_NAME" \
+     --set thunderid-component.database.config.username="$DB_USER" \
+     --set thunderid-component.database.config.password="$DB_PASS" \
+     --set thunderid-component.database.runtime.database="$DB_NAME" \
+     --set thunderid-component.database.runtime.username="$DB_USER" \
+     --set thunderid-component.database.runtime.password="$DB_PASS" \
+     --set thunderid-component.database.user.database="$DB_NAME" \
+     --set thunderid-component.database.user.username="$DB_USER" \
+     --set thunderid-component.database.user.password="$DB_PASS" \
+     --set thunderid-component.serverPublicUrl="$SERVER_PUBLIC_URL" \
+     --set thunderid-component.gate.hostname="$GATE_HOSTNAME"
    ```
 
 3. **Verify deployment**:
@@ -171,7 +171,7 @@ helm upgrade --install thunder install/openchoreo/helm/ \
    kubectl get componentrelease,releasebinding -n identity-platform
 
    # Find the ThunderID pod in the data plane namespace
-   kubectl get pod -A | grep thunder
+   kubectl get pod -A | grep thunderid
    ```
 
 4. **Access ThunderID**:
@@ -180,7 +180,7 @@ helm upgrade --install thunder install/openchoreo/helm/ \
 
    ```
    http://<environmentName>-<componentName>-<componentNamespace>.<gateway-domain>:<port>
-   # e.g. http://development-thunder-identity-platform.openchoreoapis.localhost:19080
+   # e.g. http://development-thunderid-identity-platform.openchoreoapis.localhost:19080
    ```
 
 ## Promotion
@@ -203,44 +203,44 @@ To promote ThunderID to `staging` or `production`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.componentName` | Base name for all OpenChoreo resources | `thunder` |
-| `thunder-component.image.repository` | ThunderID container image repository | `ghcr.io/asgardeo/thunder` |
-| `thunder-component.image.tag` | Container image tag | `latest` |
-| `thunder-component.thunder.server.port` | Port on which ThunderID server listens | `8090` |
-| `thunder-component.serverPublicUrl` | ThunderID public-facing URL | `<SERVER_PUBLIC_URL>` |
-| `thunder-component.project.name` | OpenChoreo project and Kubernetes `namespace` name | `identity-platform` |
-| `thunder-component.dataPlane.name` | `ClusterDataPlane` resource to bind environments to | `default` |
-| `thunder-component.replicas` | Pod replicas in the development environment | `1` |
+| `thunderid-component.componentName` | Base name for all OpenChoreo resources | `thunder` |
+| `thunderid-component.image.repository` | ThunderID container image repository | `ghcr.io/asgardeo/thunderid` |
+| `thunderid-component.image.tag` | Container image tag | `latest` |
+| `thunderid-component.thunder.server.port` | Port on which ThunderID server listens | `8090` |
+| `thunderid-component.serverPublicUrl` | ThunderID public-facing URL | `<SERVER_PUBLIC_URL>` |
+| `thunderid-component.project.name` | OpenChoreo project and Kubernetes `namespace` name | `identity-platform` |
+| `thunderid-component.dataPlane.name` | `ClusterDataPlane` resource to bind environments to | `default` |
+| `thunderid-component.replicas` | Pod replicas in the development environment | `1` |
 
 ### Database
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.database.type` | Database engine: `sqlite` or `postgres` | `sqlite` |
-| `thunder-component.database.storageSize` | PVC size for SQLite files | `1Gi` |
-| `thunder-component.database.config.path` | SQLite config DB path (relative to ThunderID working directory) | `repository/database/configdb.db` |
-| `thunder-component.database.runtime.path` | SQLite runtime DB path | `repository/database/runtimedb.db` |
-| `thunder-component.database.user.path` | SQLite user DB path | `repository/database/userdb.db` |
-| `thunder-component.database.host` | PostgreSQL hostname (`postgres` only) | — |
-| `thunder-component.database.port` | PostgreSQL port — rendered as an integer in the ConfigMap (`postgres` only) | `5432` |
-| `thunder-component.database.config.database` | Config DB name (`postgres` only) | `thunderdb` |
-| `thunder-component.database.config.username` | Config DB username (`postgres` only) | — |
-| `thunder-component.database.config.password` | Config DB password (`postgres` only) | — |
-| `thunder-component.database.config.sslmode` | Config DB SSL mode (`postgres` only) | `disable` |
-| `thunder-component.database.runtime.*` | Runtime DB settings — same fields as `config` | — |
-| `thunder-component.database.user.*` | User DB settings — same fields as `config` | — |
+| `thunderid-component.database.type` | Database engine: `sqlite` or `postgres` | `sqlite` |
+| `thunderid-component.database.storageSize` | PVC size for SQLite files | `1Gi` |
+| `thunderid-component.database.config.path` | SQLite config DB path (relative to ThunderID working directory) | `repository/database/configdb.db` |
+| `thunderid-component.database.runtime.path` | SQLite runtime DB path | `repository/database/runtimedb.db` |
+| `thunderid-component.database.user.path` | SQLite user DB path | `repository/database/userdb.db` |
+| `thunderid-component.database.host` | PostgreSQL hostname (`postgres` only) | — |
+| `thunderid-component.database.port` | PostgreSQL port — rendered as an integer in the ConfigMap (`postgres` only) | `5432` |
+| `thunderid-component.database.config.database` | Config DB name (`postgres` only) | `thunderiddb` |
+| `thunderid-component.database.config.username` | Config DB username (`postgres` only) | — |
+| `thunderid-component.database.config.password` | Config DB password (`postgres` only) | — |
+| `thunderid-component.database.config.sslmode` | Config DB SSL mode (`postgres` only) | `disable` |
+| `thunderid-component.database.runtime.*` | Runtime DB settings — same fields as `config` | — |
+| `thunderid-component.database.user.*` | User DB settings — same fields as `config` | — |
 
 ### Gate and Console
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.gate.hostname` | Gate hostname (used in development `ReleaseBinding`) | `<GATE_HOSTNAME>` |
-| `thunder-component.gate.port` | Gate port | `19080` |
-| `thunder-component.gate.scheme` | Gate scheme (`http` or `https`) | `http` |
-| `thunder-component.gate.clientBase` | Gate frontend base path | `/gate` |
-| `thunder-component.console.clientBase` | Console frontend base path | `/console` |
-| `thunder-component.console.clientId` | Console OAuth client ID | `CONSOLE` |
-| `thunder-component.console.scopes` | Console OAuth scopes (JSON array string) | `'["openid", "profile", "email", "system"]'` |
+| `thunderid-component.gate.hostname` | Gate hostname (used in development `ReleaseBinding`) | `<GATE_HOSTNAME>` |
+| `thunderid-component.gate.port` | Gate port | `19080` |
+| `thunderid-component.gate.scheme` | Gate scheme (`http` or `https`) | `http` |
+| `thunderid-component.gate.clientBase` | Gate frontend base path | `/gate` |
+| `thunderid-component.console.clientBase` | Console frontend base path | `/console` |
+| `thunderid-component.console.clientId` | Console OAuth client ID | `CONSOLE` |
+| `thunderid-component.console.scopes` | Console OAuth scopes (JSON array string) | `'["openid", "profile", "email", "system"]'` |
 
 ### Security
 
@@ -248,43 +248,43 @@ To promote ThunderID to `staging` or `production`:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.jwt.validity` | JWT token validity in seconds | `3600` |
-| `thunder-component.oauth.refresh_token_validity` | Refresh token validity in seconds | `86400` |
-| `thunder-component.crypto.encryption.key` | Crypto encryption key (path or raw value) | `file://repository/resources/security/crypto.key` |
+| `thunderid-component.jwt.validity` | JWT token validity in seconds | `3600` |
+| `thunderid-component.oauth.refresh_token_validity` | Refresh token validity in seconds | `86400` |
+| `thunderid-component.crypto.encryption.key` | Crypto encryption key (path or raw value) | `file://repository/resources/security/crypto.key` |
 
 ### Cache and Consent
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.cache.size` | Maximum number of cache entries | `10000` |
-| `thunder-component.cache.ttl` | Cache entry TTL in seconds | `3600` |
-| `thunder-component.consent.enabled` | Enable consent server integration | `false` |
-| `thunder-component.consent.baseUrl` | Consent server base URL | `http://localhost:9090/api/v1` |
+| `thunderid-component.cache.size` | Maximum number of cache entries | `10000` |
+| `thunderid-component.cache.ttl` | Cache entry TTL in seconds | `3600` |
+| `thunderid-component.consent.enabled` | Enable consent server integration | `false` |
+| `thunderid-component.consent.baseUrl` | Consent server base URL | `http://localhost:9090/api/v1` |
 
 ### CORS
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.cors.allowed_origins` | Allowed CORS origins for the development environment | `["https://thunder-gate.your-domain.com", "https://localhost:3000"]` |
+| `thunderid-component.cors.allowed_origins` | Allowed CORS origins for the development environment | `["https://thunderid-gate.your-domain.com", "https://localhost:3000"]` |
 
 ### Resource Controls
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-component.namespace.create` | Create the Kubernetes `namespace` | `true` |
-| `thunder-component.project.create` | Create the OpenChoreo Project | `true` |
-| `thunder-component.pipeline.create` | Create the DeploymentPipeline | `true` |
-| `thunder-component.environments.development.create` | Create the development Environment | `true` |
-| `thunder-component.environments.staging.create` | Create the staging Environment | `true` |
-| `thunder-component.environments.production.create` | Create the production Environment | `true` |
-| `thunder-component.releaseBinding.create` | Create the development ReleaseBinding (auto-deploy) | `true` |
+| `thunderid-component.namespace.create` | Create the Kubernetes `namespace` | `true` |
+| `thunderid-component.project.create` | Create the OpenChoreo Project | `true` |
+| `thunderid-component.pipeline.create` | Create the DeploymentPipeline | `true` |
+| `thunderid-component.environments.development.create` | Create the development Environment | `true` |
+| `thunderid-component.environments.staging.create` | Create the staging Environment | `true` |
+| `thunderid-component.environments.production.create` | Create the production Environment | `true` |
+| `thunderid-component.releaseBinding.create` | Create the development ReleaseBinding (auto-deploy) | `true` |
 
 ### ComponentType Scope
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `thunder-oc-componenttype.componentType.cluster` | `true` → `ClusterComponentType` (cluster-scoped); `false` → namespace-scoped `ComponentType` | `true` |
-| `thunder-component.componentType.cluster` | Must match the value above | `true` |
+| `thunderid-oc-componenttype.componentType.cluster` | `true` → `ClusterComponentType` (cluster-scoped); `false` → namespace-scoped `ComponentType` | `true` |
+| `thunderid-component.componentType.cluster` | Must match the value above | `true` |
 
 ## OpenChoreo UI — Environment Variables
 
@@ -308,18 +308,18 @@ The `HTTPRoute` hostname is constructed as:
 <environmentName>-<componentName>-<componentNamespace>.<gateway-domain>
 ```
 
-For example, with `componentName: thunder`, `namespace` `identity-platform`, environment `development`, and gateway domain `openchoreoapis.localhost`:
+For example, with `componentName: thunderid`, `namespace` `identity-platform`, environment `development`, and gateway domain `openchoreoapis.localhost`:
 
 ```
-development-thunder-identity-platform.openchoreoapis.localhost
+development-thunderid-identity-platform.openchoreoapis.localhost
 ```
 
 Use this to derive the following values when configuring the Component via the UI:
 
 | Field | Derived value |
 |-------|---------------|
-| `Server Public URL` | `http://<hostname>:<gateway-port>` e.g. `http://development-thunder-identity-platform.openchoreoapis.localhost:19080` |
-| `Gate Client Hostname` | `<hostname>` e.g. `development-thunder-identity-platform.openchoreoapis.localhost` |
+| `Server Public URL` | `http://<hostname>:<gateway-port>` e.g. `http://development-thunderid-identity-platform.openchoreoapis.localhost:19080` |
+| `Gate Client Hostname` | `<hostname>` e.g. `development-thunderid-identity-platform.openchoreoapis.localhost` |
 
 ### General
 
@@ -369,8 +369,8 @@ Use this to derive the following values when configuring the Component via the U
 Create the database and grant privileges before setting these values:
 
 ```sql
-CREATE DATABASE thunderdb OWNER dbuser;
-GRANT ALL PRIVILEGES ON DATABASE thunderdb TO dbuser;
+CREATE DATABASE thunderiddb OWNER dbuser;
+GRANT ALL PRIVILEGES ON DATABASE thunderiddb TO dbuser;
 ```
 
 | Environment Variable | How to get |
@@ -400,19 +400,19 @@ install/openchoreo/helm/
 ├── values.yaml                         # Top-level defaults (sub-chart overrides)
 ├── README.md
 └── charts/
-    ├── thunder-oc-componenttype/
+    ├── thunderid-oc-componenttype/
     │   ├── Chart.yaml
     │   ├── values.yaml                 # ComponentType scope toggle
     │   └── templates/
-    │       └── thunder-componenttype.yaml  # ClusterComponentType / ComponentType
-    └── thunder-component/
+    │       └── thunderid-componenttype.yaml  # ClusterComponentType / ComponentType
+    └── thunderid-component/
         ├── Chart.yaml
         ├── values.yaml                 # All ThunderID instance defaults
         └── templates/
             ├── namespace.yaml          # Kubernetes Namespace
-            ├── thunder-platform.yaml   # Project, DeploymentPipeline, Environments
-            ├── thunder-component.yaml  # Component and Workload
-            └── thunder-release.yaml    # ComponentRelease and ReleaseBinding (post-install hooks)
+            ├── thunderid-platform.yaml   # Project, DeploymentPipeline, Environments
+            ├── thunderid-component.yaml  # Component and Workload
+            └── thunderid-release.yaml    # ComponentRelease and ReleaseBinding (post-install hooks)
 ```
 
 ## Debugging
@@ -422,7 +422,7 @@ install/openchoreo/helm/
 kubectl get clustercomponenttype,component,workload,componentrelease,releasebinding -n identity-platform
 
 # Find all ThunderID pods across data plane namespaces
-kubectl get pod -A | grep thunder
+kubectl get pod -A | grep thunderid
 
 # Check ThunderID logs
 kubectl logs <pod-name> -n <dp-namespace>
@@ -437,10 +437,10 @@ kubectl logs job/<componentName>-setup -n <dp-namespace>
 kubectl logs <pod-name> -n <dp-namespace> -c wait-for-setup
 
 # Render templates locally without installing
-helm template thunder install/openchoreo/helm/ \
+helm template thunderid install/openchoreo/helm/ \
   --namespace identity-platform \
-  --set thunder-component.serverPublicUrl="http://thunder-dev.example.com" \
-  --set thunder-component.gate.hostname="thunder-dev.example.com"
+  --set thunderid-component.serverPublicUrl="http://thunderid-dev.example.com" \
+  --set thunderid-component.gate.hostname="thunderid-dev.example.com"
 ```
 
 ## Security Considerations
@@ -450,7 +450,7 @@ helm template thunder install/openchoreo/helm/ \
 - Configure `cors.allowed_origins` restrictively — avoid wildcards
 - Enable SSL/TLS for PostgreSQL connections in production (`sslmode: verify-full`)
 - Use specific image tags instead of `latest` in production
-- Set `thunder-oc-componenttype.componentType.cluster: false` if you need namespace-scoped isolation
+- Set `thunderid-oc-componenttype.componentType.cluster: false` if you need namespace-scoped isolation
 
 ## Contributing
 

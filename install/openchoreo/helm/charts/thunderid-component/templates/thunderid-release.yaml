@@ -37,11 +37,11 @@ spec:
     spec:
       {{- if .Values.componentType.cluster }}
       {{- $ct := lookup "openchoreo.dev/v1alpha1" "ClusterComponentType" "" "thunder" }}
-      {{- if not $ct }}{{ fail "ClusterComponentType 'thunder' not found. Install the thunder-oc-componenttype chart first." }}{{ end }}
+      {{- if not $ct }}{{ fail "ClusterComponentType 'thunder' not found. Install the thunderid-oc-componenttype chart first." }}{{ end }}
       {{- $ct.spec | toYaml | nindent 6 }}
       {{- else }}
       {{- $ct := lookup "openchoreo.dev/v1alpha1" "ComponentType" .Release.Namespace "thunder" }}
-      {{- if not $ct }}{{ fail "ComponentType 'thunder' not found. Install the thunder-oc-componenttype chart first." }}{{ end }}
+      {{- if not $ct }}{{ fail "ComponentType 'thunder' not found. Install the thunderid-oc-componenttype chart first." }}{{ end }}
       {{- $ct.spec | toYaml | nindent 6 }}
       {{- end }}
   workload:
@@ -49,7 +49,7 @@ spec:
       image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
       env:
         - key: SERVER_PORT
-          value: {{ .Values.thunder.server.port | quote }}
+          value: {{ .Values.thunderid.server.port | quote }}
         - key: JWT_VALIDITY
           value: {{ .Values.jwt.validity | quote }}
         - key: OAUTH_REFRESH_TOKEN_VALIDITY
