@@ -70,7 +70,7 @@ window.__THUNDER_RUNTIME_CONFIG__ = {
 | `public_url` | Fully-qualified URL of the external authorization server. Used by the console to build authorization requests. |
 | `client_id` | OAuth client ID registered on the external authorization server for this <ProductName /> instance's console. |
 | `scopes` | Scopes the console requests from the external authorization server. Must include every scope <ProductName />'s APIs require. |
-| `type` | Set to `"generic"` when the trusted issuer is a generic OIDC provider. When set, the console skips <ProductName />-specific bootstrap calls (flow metadata, branding preferences) that would fail against a generic provider and uses the IdP's `end_session_endpoint` for sign-out. Defaults to `"thunder"`. |
+| `type` | Set to `"generic"` when the trusted issuer is a generic OIDC provider. When set, the console skips <ProductName />-specific bootstrap calls (flow metadata, branding preferences) that would fail against a generic provider and uses the IdP's `end_session_endpoint` for sign-out. Defaults to `"thunderid"`. |
 
 When this block is present, the console delegates login to the external authorization server. When omitted, the console authenticates against this <ProductName /> instance normally.
 
