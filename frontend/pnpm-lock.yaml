@@ -331,6 +331,9 @@ importers:
       '@thunderid/configure-organization-units':
         specifier: workspace:^
         version: link:../../packages/configure-organization-units
+      '@thunderid/configure-resource-servers':
+        specifier: workspace:^
+        version: link:../../packages/configure-resource-servers
       '@thunderid/configure-translations':
         specifier: workspace:^
         version: link:../../packages/configure-translations
@@ -885,6 +888,115 @@ importers:
       '@vitest/browser-playwright':
         specifier: 'catalog:'
         version: 4.1.3(playwright@1.58.1)(vite@8.0.7(@types/node@24.7.2)(jiti@2.6.1)(sass-embedded@1.98.0)(sass@1.98.0)(terser@5.46.0)(yaml@2.8.3))(vitest@4.1.3)
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.4(jiti@2.6.1)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.6.2
+      react:
+        specifier: 'catalog:'
+        version: 19.2.3
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.3(react@19.2.3)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      rolldown:
+        specifier: 'catalog:'
+        version: 1.0.0-beta.45(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)
+      tslib:
+        specifier: 'catalog:'
+        version: 2.8.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.3(@opentelemetry/api@1.9.0)(@types/node@24.7.2)(@vitest/browser-playwright@4.1.3)(@vitest/coverage-istanbul@4.1.3)(jsdom@27.0.1(postcss@8.5.8))(vite@8.0.7(@types/node@24.7.2)(jiti@2.6.1)(sass-embedded@1.98.0)(sass@1.98.0)(terser@5.46.0)(yaml@2.8.3))
+
+  packages/configure-resource-servers:
+    dependencies:
+      '@asgardeo/react':
+        specifier: 'catalog:'
+        version: 0.23.6(@types/react@19.2.7)(react@19.2.3)
+      '@hookform/resolvers':
+        specifier: 'catalog:'
+        version: 5.2.2(react-hook-form@7.65.0(react@19.2.3))(zod@4.3.6)
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.90.5(react@19.2.3)
+      '@thunderid/components':
+        specifier: workspace:^
+        version: link:../components
+      '@thunderid/configure-organization-units':
+        specifier: workspace:^
+        version: link:../configure-organization-units
+      '@thunderid/contexts':
+        specifier: workspace:^
+        version: link:../contexts
+      '@thunderid/design':
+        specifier: workspace:^
+        version: link:../design
+      '@thunderid/hooks':
+        specifier: workspace:^
+        version: link:../hooks
+      '@thunderid/i18n':
+        specifier: workspace:^
+        version: link:../i18n
+      '@thunderid/logger':
+        specifier: workspace:^
+        version: link:../logger
+      '@thunderid/utils':
+        specifier: workspace:^
+        version: link:../utils
+      '@wso2/oxygen-ui':
+        specifier: 'catalog:'
+        version: 0.10.1(@mui/system@7.3.6(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(@wso2/oxygen-ui-icons-react@0.10.1(react@19.2.3))(dayjs@1.11.18)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@wso2/oxygen-ui-icons-react':
+        specifier: 'catalog:'
+        version: 0.10.1(react@19.2.3)
+      react-hook-form:
+        specifier: 'catalog:'
+        version: 7.65.0(react@19.2.3)
+      react-i18next:
+        specifier: 'catalog:'
+        version: 16.0.1(i18next@25.6.0(typescript@5.9.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(typescript@5.9.3)
+      react-router:
+        specifier: 'catalog:'
+        version: 7.12.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@testing-library/jest-dom':
+        specifier: 'catalog:'
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.0(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@testing-library/user-event':
+        specifier: 'catalog:'
+        version: 14.6.1(@testing-library/dom@10.4.1)
+      '@thunderid/eslint-plugin':
+        specifier: workspace:^
+        version: link:../eslint-plugin
+      '@thunderid/prettier-config':
+        specifier: workspace:^
+        version: link:../prettier-config
+      '@thunderid/test-utils':
+        specifier: workspace:^
+        version: link:../test-utils
+      '@thunderid/types':
+        specifier: workspace:^
+        version: link:../types
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.7.2
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.7
       eslint:
         specifier: 'catalog:'
         version: 9.39.4(jiti@2.6.1)
@@ -4222,8 +4334,8 @@ packages:
   '@posthog/types@1.363.2':
     resolution: {integrity: sha512-UcUwHEd2LXxWq4bW/I4TbwYcA+BHO/cSuHcNpGXjRCp76eJk1eOuQnm/a3MrfHtbt2X11CQu+eWpqiSgcv+X6A==}
 
-  '@preact/signals-core@1.14.1':
-    resolution: {integrity: sha512-vxPpfXqrwUe9lpjqfYNjAF/0RF/eFGeLgdJzdmIIZjpOnTmGmAB4BjWone562mJGMRP4frU6iZ6ei3PDsu52Ng==}
+  '@preact/signals-core@1.14.2':
+    resolution: {integrity: sha512-RZHdBj9ZF4n40Rp4jS052EHHjBWf96P9oNdXPfhQTovCuWY9iQn3Gq+gOTJSgBO9A/JBuPfMOWsSX/lIU9Pc/A==}
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -13058,7 +13170,7 @@ snapshots:
 
   '@dnd-kit/state@0.4.0':
     dependencies:
-      '@preact/signals-core': 1.14.1
+      '@preact/signals-core': 1.14.2
       tslib: 2.8.1
 
   '@docsearch/core@4.5.4(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
@@ -14428,7 +14540,7 @@ snapshots:
   '@lexical/extension@0.38.2':
     dependencies:
       '@lexical/utils': 0.38.2
-      '@preact/signals-core': 1.14.1
+      '@preact/signals-core': 1.14.2
       lexical: 0.38.2
 
   '@lexical/hashtag@0.38.2':
@@ -15165,7 +15277,7 @@ snapshots:
 
   '@posthog/types@1.363.2': {}
 
-  '@preact/signals-core@1.14.1': {}
+  '@preact/signals-core@1.14.2': {}
 
   '@protobufjs/aspromise@1.1.2': {}
 

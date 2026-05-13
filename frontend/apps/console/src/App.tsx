@@ -24,6 +24,7 @@ import {
   OrganizationUnitEditPage,
   OrganizationUnitsListPage,
 } from '@thunderid/configure-organization-units';
+import {ApisListPage, ApiEditPage, CreateApiPage} from '@thunderid/configure-resource-servers';
 import {
   TranslationCreateProvider,
   TranslationCreatePage,
@@ -112,6 +113,8 @@ export default function App(): JSX.Element {
             <Route path="agents" element={<AgentsListPage />} />
             <Route path="agents/:agentId" element={<AgentEditPage />} />
             <Route path="flows" element={<FlowsListPage />} />
+            <Route path="apis" element={<ApisListPage />} />
+            <Route path="apis/:resourceServerId" element={<ApiEditPage />} />
           </Route>
           {/* Organization Units - wrapped in OrganizationUnitProvider to preserve tree state across navigation */}
           <Route
@@ -211,6 +214,16 @@ export default function App(): JSX.Element {
             }
           >
             <Route index element={<AgentCreatePage />} />
+          </Route>
+          <Route
+            path="/apis/create"
+            element={
+              <ProtectedRoute>
+                <FullScreenLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<CreateApiPage />} />
           </Route>
           <Route
             path="/flows/create"

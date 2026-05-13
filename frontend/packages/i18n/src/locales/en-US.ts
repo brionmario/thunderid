@@ -369,6 +369,7 @@ const translations = {
     'pages.roles': 'Roles',
     'pages.integrations': 'Integrations',
     'pages.applications': 'Applications',
+    'pages.apis': 'APIs',
     'pages.dashboard': 'Dashboard',
     'pages.flows': 'Flows',
     'pages.design': 'Design',
@@ -3015,6 +3016,119 @@ const translations = {
     // Feature status labels
     'feature_status.new': 'New',
     'feature_status.coming_soon': 'Coming Soon',
+  },
+
+  // ============================================================================
+  // APIs namespace - Resource Server management feature translations
+  // ============================================================================
+  apis: {
+    // Listing page
+    'listing.title': 'APIs',
+    'listing.subtitle': 'Define APIs and their resources to manage access control.',
+    'listing.addApi': 'Add API',
+    'listing.columns.name': 'Name',
+    'listing.columns.identifier': 'Identifier',
+    'listing.columns.handle': 'Handle',
+    'listing.systemApi': 'System API',
+    'listing.actions.view': 'View',
+    'listing.actions.delete': 'Delete',
+    'listing.error': 'Failed to load APIs.',
+
+    // Delete dialog
+    'delete.title': 'Delete API',
+    'delete.message': 'Are you sure you want to delete this API? This action cannot be undone.',
+    'delete.disclaimer': 'Warning: All associated resources, actions, and permission strings will be permanently removed.',
+
+    // Create wizard — step breadcrumbs
+    'create.steps.details': 'Create an API',
+    'create.steps.organizationUnit': 'Organization',
+
+    // Create wizard — details step
+    'create.details.title': "Let's give a name to your API",
+    'create.details.subtitle': 'Give your API a name and a unique handle that will prefix all its permission strings.',
+    'create.details.nameLabel': 'API Name',
+    'create.details.namePlaceholder': 'e.g. Payments API',
+    'create.details.suggestions': 'Need inspiration? Pick one:',
+    'create.details.handleLabel': 'API Handle',
+    'create.details.handlePlaceholder': 'e.g. payments-api',
+    'create.details.handleHint': 'The handle prefixes every permission in this API — for example, handle "payments-api" produces permissions like payments-api:invoices:read. It cannot be changed after creation.',
+
+    // Create wizard — organization unit step
+    'create.orgUnit.title': 'Choose an organization unit',
+    'create.orgUnit.subtitle': 'Select which organization unit this API belongs to.',
+    'create.orgUnit.fieldLabel': 'Organization Unit',
+
+    // Create wizard — actions
+    'create.submit': 'Create API',
+    'create.creating': 'Creating…',
+    'create.success': 'API created successfully.',
+    'create.error': 'Failed to create API.',
+
+    // Edit page
+    'edit.back': 'Back to APIs',
+    'edit.notFound': 'API not found.',
+    'edit.systemApi': 'System API',
+    'edit.tabs': 'API settings',
+    'edit.tab.settings': 'Settings',
+    'edit.tab.permissions': 'Permissions',
+    'edit.tab.appAccess': 'Application Access',
+
+    // Settings tab
+    'settings.readOnly': 'This API represents a system entity and cannot be modified or deleted. You can still manage its permissions.',
+    'settings.general': 'General Settings',
+    'settings.immutable': 'Immutable Properties',
+    'settings.saved': 'Settings saved.',
+    'settings.saveError': 'Failed to save settings.',
+    'settings.fields.name': 'Name',
+    'settings.fields.description': 'Description',
+    'settings.fields.identifier': 'Identifier (Audience)',
+    'settings.fields.identifierHint': 'Used as the audience parameter on authorization calls.',
+    'settings.fields.handle': 'Handle',
+    'settings.fields.delimiter': 'Delimiter',
+
+    // Resource tree
+    'tree.title': 'Resource Hierarchy',
+    'tree.empty': 'No resources yet. Hover over the API name to add one.',
+    'tree.addResource': 'Add resource',
+    'tree.addServerAction': 'Add API-level action',
+    'tree.addSubResource': 'Add sub-resource',
+    'tree.addAction': 'Add action',
+    'tree.deleteResource.success': 'Resource deleted.',
+    'tree.deleteResource.error': 'Cannot delete — remove child resources and actions first.',
+    'tree.deleteAction.success': 'Action deleted.',
+    'tree.deleteAction.error': 'Failed to delete action.',
+    'tree.addResource.title': 'Add Resource',
+    'tree.addSubResource.title': 'Add Sub-resource',
+    'tree.addAction.title': 'Add Action',
+    'tree.fields.name': 'Name',
+    'tree.fields.handle': 'Handle',
+    'tree.fields.handleHint': 'Lowercase, alphanumeric and . _ - : / — cannot be changed after creation.',
+    'tree.fields.description': 'Description',
+    'tree.fields.permissionPreview': 'Permission string',
+    'tree.addResource.success': 'Resource added.',
+    'tree.addResource.error': 'Failed to add resource.',
+    'tree.addAction.success': 'Action added.',
+    'tree.addAction.error': 'Failed to add action.',
+
+    // Detail panel
+    'detail.selectNode': 'Select a node from the tree to view its details.',
+    'detail.permission': 'Permission',
+    'detail.readOnlyWarning': 'This is a system API and cannot be modified.',
+    'detail.saved': 'Changes saved.',
+    'detail.saveError': 'Failed to save.',
+    'detail.types.api': 'API',
+    'detail.types.resource': 'Resource',
+    'detail.types.action': 'Action',
+    'detail.fields.name': 'Name',
+    'detail.fields.description': 'Description',
+    'detail.fields.identifier': 'Identifier',
+    'detail.fields.identifierHint': 'Used as audience parameter in OAuth2 flows.',
+    'detail.fields.handle': 'Handle (immutable)',
+    'detail.fields.delimiter': 'Delimiter (immutable)',
+
+    // Application Access tab
+    'appAccess.comingSoon': 'Application access configuration is coming soon.',
+    'appAccess.comingSoonDescription': 'You will be able to grant applications access to this API and configure which permissions each application can use.',
   },
 
   // ============================================================================
