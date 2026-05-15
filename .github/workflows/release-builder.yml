@@ -618,7 +618,7 @@ jobs:
       - name: ⚙️ Set up Node.js for Version Update
         uses: ./.github/actions/setup-node
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: 'lts/*'
           package-manager: 'npm'
           dependency-path: 'samples/apps/react-vanilla-sample'
 
