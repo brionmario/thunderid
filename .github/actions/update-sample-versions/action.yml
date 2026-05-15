@@ -37,14 +37,14 @@ runs:
         # Update react-sdk sample
         echo "Updating react-sdk-sample..."
         cd samples/apps/react-sdk-sample
-        pnpm version "$SAMPLE_VERSION" --no-git-tag-version --allow-same-version
+        npm version "$SAMPLE_VERSION" --no-git-tag-version --allow-same-version
 
         cd "$GITHUB_WORKSPACE"
 
         # Update react-api-based sample
         echo "Updating react-api-based-sample..."
         cd samples/apps/react-api-based-sample
-        pnpm version "$SAMPLE_VERSION" --no-git-tag-version --allow-same-version
+        npm version "$SAMPLE_VERSION" --no-git-tag-version --allow-same-version
 
         cd "$GITHUB_WORKSPACE"
 
