@@ -5,7 +5,7 @@
   "description": "Wayfinder travel sample demonstrating an AI agent with its own ThunderID-managed identity.",
   "scripts": {
     "install:all": "npm --prefix backend install && npm --prefix ai-agent install && npm --prefix frontend install",
-    "build:all": "npm --prefix frontend run build",
-    "start:all": "bash start.sh"
+    "prestart": "npm run install:all",
+    "start": "npm --prefix backend run start & npm --prefix ai-agent run start & npm --prefix frontend run dev"
   }
 }
