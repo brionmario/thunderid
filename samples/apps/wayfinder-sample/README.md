@@ -174,7 +174,15 @@ The agent secret defaults to `wayfinder-agent-secret` (matching `thunderid.env`)
 
 ## Run
 
-In three terminals:
+From the sample root:
+
+```bash
+npm start
+```
+
+This installs dependencies for all services and starts them together.
+
+Or run each service in a separate terminal for individual logs:
 
 ```bash
 cd backend  && npm install && npm run seed && npm start   # http://localhost:8787 (REST + /mcp)
