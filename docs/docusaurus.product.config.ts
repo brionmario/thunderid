@@ -72,14 +72,14 @@ const DocusaurusProductConfig = {
     source: {
       github: {
         name: 'thunderid',
-        fullName: 'thunder-id/thunderid',
-        url: 'https://github.com/thunder-id/thunderid',
-        discussionsUrl: 'https://github.com/thunder-id/thunderid/discussions',
-        issuesUrl: 'https://github.com/thunder-id/thunderid/issues',
+        fullName: 'brionmario/thunderid',
+        url: 'https://github.com/brionmario/thunderid',
+        discussionsUrl: 'https://github.com/brionmario/thunderid/discussions',
+        issuesUrl: 'https://github.com/brionmario/thunderid/issues',
         releasesUrl: '/docs/next/releases',
         editUrls: {
-          blog: 'https://github.com/thunder-id/thunderid/tree/main/blog/',
-          content: 'https://github.com/thunder-id/thunderid/tree/main/docs/',
+          blog: 'https://github.com/brionmario/thunderid/tree/main/blog/',
+          content: 'https://github.com/brionmario/thunderid/tree/main/docs/',
         },
         owner: {
           name: 'thunderid',
