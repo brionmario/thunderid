@@ -75,7 +75,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "@thunderid/react": "workspace:^",
+    "@thunderid/react": "catalog:",
     "@monaco-editor/react": "catalog:",
     "@wso2/oxygen-ui": "catalog:",
     "@wso2/oxygen-ui-icons-react": "catalog:",

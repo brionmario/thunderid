@@ -77,7 +77,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "@thunderid/react": "workspace:^",
+    "@thunderid/react": "catalog:",
     "@hookform/resolvers": "catalog:",
     "@wso2/oxygen-ui": "catalog:",
     "@wso2/oxygen-ui-icons-react": "catalog:",

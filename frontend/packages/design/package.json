@@ -76,7 +76,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@thunderid/react": "workspace:^",
+    "@thunderid/react": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@thunderid/logger": "workspace:^",
     "@thunderid/contexts": "workspace:^",
