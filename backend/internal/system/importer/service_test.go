@@ -1609,7 +1609,6 @@ func TestImportResources_OrganizationUnitCarriesDefaultFlowFields(t *testing.T) 
 		"recoveryFlowId: recovery-flow-1",
 		"isRecoveryFlowEnabled: true",
 		"signOutFlowId: signout-flow-1",
-		"isSignOutFlowEnabled: true",
 		"",
 	}, "\n")
 
@@ -1626,7 +1625,6 @@ func TestImportResources_OrganizationUnitCarriesDefaultFlowFields(t *testing.T) 
 	assert.Equal(t, "recovery-flow-1", ouSvc.created[0].RecoveryFlowID)
 	assert.True(t, ouSvc.created[0].IsRecoveryFlowEnabled)
 	assert.Equal(t, "signout-flow-1", ouSvc.created[0].SignOutFlowID)
-	assert.True(t, ouSvc.created[0].IsSignOutFlowEnabled)
 }
 
 func TestImportResources_FlowUpsertCreatePreservesID(t *testing.T) {

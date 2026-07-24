@@ -510,7 +510,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPostRequest
 				"recoveryFlowId": "recovery-flow-123",
 				"isRecoveryFlowEnabled": true,
 				"signOutFlowId": "signout-flow-123",
-				"isSignOutFlowEnabled": true,
 				"logoUrl": "https://example.com/logo.png"
 			}`,
 			setup: func(serviceMock *OrganizationUnitServiceInterfaceMock) {
@@ -527,7 +526,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPostRequest
 								req.RecoveryFlowID == "recovery-flow-123" &&
 								req.IsRecoveryFlowEnabled &&
 								req.SignOutFlowID == "signout-flow-123" &&
-								req.IsSignOutFlowEnabled &&
 								req.LogoURL == "https://example.com/logo.png"
 						})).
 					Return(providers.OrganizationUnit{
@@ -542,7 +540,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPostRequest
 						RecoveryFlowID:            "recovery-flow-123",
 						IsRecoveryFlowEnabled:     true,
 						SignOutFlowID:             "signout-flow-123",
-						IsSignOutFlowEnabled:      true,
 						LogoURL:                   "https://example.com/logo.png",
 					}, nil).
 					Once()
@@ -560,7 +557,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPostRequest
 				suite.Equal("recovery-flow-123", resp.RecoveryFlowID)
 				suite.True(resp.IsRecoveryFlowEnabled)
 				suite.Equal("signout-flow-123", resp.SignOutFlowID)
-				suite.True(resp.IsSignOutFlowEnabled)
 				suite.Equal("https://example.com/logo.png", resp.LogoURL)
 			},
 		},
@@ -918,7 +914,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPutRequest(
 				"recoveryFlowId": "recovery-flow-new",
 				"isRecoveryFlowEnabled": true,
 				"signOutFlowId": "signout-flow-new",
-				"isSignOutFlowEnabled": true,
 				"logoUrl": "https://example.com/new-logo.png"
 			}`,
 			setJSONHeader:  true,
@@ -939,7 +934,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPutRequest(
 								req.RecoveryFlowID == "recovery-flow-new" &&
 								req.IsRecoveryFlowEnabled &&
 								req.SignOutFlowID == "signout-flow-new" &&
-								req.IsSignOutFlowEnabled &&
 								req.LogoURL == "https://example.com/new-logo.png"
 						}),
 					).
@@ -955,7 +949,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPutRequest(
 						RecoveryFlowID:            "recovery-flow-new",
 						IsRecoveryFlowEnabled:     true,
 						SignOutFlowID:             "signout-flow-new",
-						IsSignOutFlowEnabled:      true,
 						LogoURL:                   "https://example.com/new-logo.png",
 					}, nil).
 					Once()
@@ -972,7 +965,6 @@ func (suite *OrganizationUnitHandlerTestSuite) TestOUHandler_HandleOUPutRequest(
 				suite.Equal("recovery-flow-new", resp.RecoveryFlowID)
 				suite.True(resp.IsRecoveryFlowEnabled)
 				suite.Equal("signout-flow-new", resp.SignOutFlowID)
-				suite.True(resp.IsSignOutFlowEnabled)
 				suite.Equal("https://example.com/new-logo.png", resp.LogoURL)
 			},
 		},

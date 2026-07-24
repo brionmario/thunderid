@@ -34,7 +34,6 @@ import (
 	"github.com/thunder-id/thunderid/internal/system/database/provider"
 	"github.com/thunder-id/thunderid/internal/system/log"
 	"github.com/thunder-id/thunderid/internal/system/transaction"
-	"github.com/thunder-id/thunderid/internal/system/utils"
 )
 
 const storeLoggerComponentName = "OrganizationUnitStore"
@@ -204,15 +203,6 @@ func (s *organizationUnitStore) CreateOrganizationUnit(ctx context.Context, ou p
 		ou.Handle,
 		ou.Name,
 		ou.Description,
-		ou.ThemeID,
-		ou.LayoutID,
-		ou.AuthFlowID,
-		ou.RegistrationFlowID,
-		utils.BoolToNumString(ou.IsRegistrationFlowEnabled),
-		ou.RecoveryFlowID,
-		utils.BoolToNumString(ou.IsRecoveryFlowEnabled),
-		ou.SignOutFlowID,
-		utils.BoolToNumString(ou.IsSignOutFlowEnabled),
 		string(ouMetadataBytes),
 		s.deploymentID,
 		ou.CreatedAt,
@@ -409,15 +399,6 @@ func (s *organizationUnitStore) UpdateOrganizationUnit(ctx context.Context, ou p
 		ou.Handle,
 		ou.Name,
 		ou.Description,
-		ou.ThemeID,
-		ou.LayoutID,
-		ou.AuthFlowID,
-		ou.RegistrationFlowID,
-		utils.BoolToNumString(ou.IsRegistrationFlowEnabled),
-		ou.RecoveryFlowID,
-		utils.BoolToNumString(ou.IsRecoveryFlowEnabled),
-		ou.SignOutFlowID,
-		utils.BoolToNumString(ou.IsSignOutFlowEnabled),
 		string(ouMetadataBytes),
 		ou.UpdatedAt,
 		s.deploymentID,
@@ -608,52 +589,6 @@ func buildOrganizationUnitFromResultRow(
 		}
 	}
 
-	themeID := ""
-	if v, ok := row["theme_id"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			themeID = s
-		}
-	}
-
-	layoutID := ""
-	if v, ok := row["layout_id"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			layoutID = s
-		}
-	}
-
-	authFlowID := ""
-	if v, ok := row["auth_flow_id"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			authFlowID = s
-		}
-	}
-
-	registrationFlowID := ""
-	if v, ok := row["registration_flow_id"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			registrationFlowID = s
-		}
-	}
-
-	recoveryFlowID := ""
-	if v, ok := row["recovery_flow_id"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			recoveryFlowID = s
-		}
-	}
-
-	signOutFlowID := ""
-	if v, ok := row["signout_flow_id"]; ok && v != nil {
-		if s, ok := v.(string); ok {
-			signOutFlowID = s
-		}
-	}
-
-	isRegistrationFlowEnabled := parseBoolColumn(row, "is_registration_flow_enabled")
-	isRecoveryFlowEnabled := parseBoolColumn(row, "is_recovery_flow_enabled")
-	isSignOutFlowEnabled := parseBoolColumn(row, "is_signout_flow_enabled")
-
 	// Extract OU Metadata data
 	ouMetadataData, err := parseOUMetadata(row)
 	if err != nil {
@@ -661,6 +596,46 @@ func buildOrganizationUnitFromResultRow(
 	}
 
 	// Extract fields from OU Metadata
+	themeID, err := extractStringFromOUMetadata(ouMetadataData, "theme_id")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	layoutID, err := extractStringFromOUMetadata(ouMetadataData, "layout_id")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	authFlowID, err := extractStringFromOUMetadata(ouMetadataData, "auth_flow_id")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	registrationFlowID, err := extractStringFromOUMetadata(ouMetadataData, "registration_flow_id")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	isRegistrationFlowEnabled, err := extractBoolFromOUMetadata(ouMetadataData, "is_registration_flow_enabled")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	recoveryFlowID, err := extractStringFromOUMetadata(ouMetadataData, "recovery_flow_id")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	isRecoveryFlowEnabled, err := extractBoolFromOUMetadata(ouMetadataData, "is_recovery_flow_enabled")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
+	signOutFlowID, err := extractStringFromOUMetadata(ouMetadataData, "signout_flow_id")
+	if err != nil {
+		return providers.OrganizationUnit{}, err
+	}
+
 	logoURL, err := extractStringFromOUMetadata(ouMetadataData, "logo_url")
 	if err != nil {
 		return providers.OrganizationUnit{}, err
@@ -705,7 +680,6 @@ func buildOrganizationUnitFromResultRow(
 		RecoveryFlowID:            recoveryFlowID,
 		IsRecoveryFlowEnabled:     isRecoveryFlowEnabled,
 		SignOutFlowID:             signOutFlowID,
-		IsSignOutFlowEnabled:      isSignOutFlowEnabled,
 		LogoURL:                   logoURL,
 		TosURI:                    tosURI,
 		PolicyURI:                 policyURI,
@@ -713,23 +687,6 @@ func buildOrganizationUnitFromResultRow(
 		CreatedAt:                 createdAt,
 		UpdatedAt:                 updatedAt,
 	}, nil
-}
-
-// parseBoolColumn extracts a boolean value from a numeric string column ("1"/"0"),
-// handling both string and []byte driver representations. Returns false when absent.
-func parseBoolColumn(row map[string]interface{}, key string) bool {
-	v, ok := row[key]
-	if !ok || v == nil {
-		return false
-	}
-	switch val := v.(type) {
-	case string:
-		return utils.NumStringToBool(val)
-	case []byte:
-		return utils.NumStringToBool(string(val))
-	default:
-		return false
-	}
 }
 
 // parseTimeField parses a time field from the database result.
@@ -803,10 +760,18 @@ func (s *organizationUnitStore) checkConflict(ctx context.Context,
 // getOUMetadataDataBytes constructs the JSON data bytes for the organization unit.
 func getOUMetadataDataBytes(ou *providers.OrganizationUnit) ([]byte, error) {
 	jsonData := map[string]interface{}{
-		"logo_url":          ou.LogoURL,
-		"tos_uri":           ou.TosURI,
-		"policy_uri":        ou.PolicyURI,
-		"cookie_policy_uri": ou.CookiePolicyURI,
+		"theme_id":                     ou.ThemeID,
+		"layout_id":                    ou.LayoutID,
+		"auth_flow_id":                 ou.AuthFlowID,
+		"registration_flow_id":         ou.RegistrationFlowID,
+		"is_registration_flow_enabled": ou.IsRegistrationFlowEnabled,
+		"recovery_flow_id":             ou.RecoveryFlowID,
+		"is_recovery_flow_enabled":     ou.IsRecoveryFlowEnabled,
+		"signout_flow_id":              ou.SignOutFlowID,
+		"logo_url":                     ou.LogoURL,
+		"tos_uri":                      ou.TosURI,
+		"policy_uri":                   ou.PolicyURI,
+		"cookie_policy_uri":            ou.CookiePolicyURI,
 	}
 
 	jsonBytes, err := json.Marshal(jsonData)
@@ -856,4 +821,16 @@ func extractStringFromOUMetadata(data map[string]interface{}, key string) (strin
 		return str, nil
 	}
 	return "", fmt.Errorf("failed to parse %s from OU Metadata", key)
+}
+
+// extractBoolFromOUMetadata extracts a boolean value from OU Metadata data,
+// returns false if not found or invalid.
+func extractBoolFromOUMetadata(data map[string]interface{}, key string) (bool, error) {
+	if data[key] == nil {
+		return false, nil
+	}
+	if b, ok := data[key].(bool); ok {
+		return b, nil
+	}
+	return false, fmt.Errorf("failed to parse %s from OU Metadata", key)
 }

@@ -93,6 +93,13 @@ type OrganizationUnitServiceInterface interface {
 	) (map[string]string, *tidcommon.ServiceError)
 }
 
+// ouFlowResolver validates that a flow ID exists and matches the expected flow type, for
+// validating an organization unit's default flow fields. Defined locally rather than importing
+// internal/flow/mgt directly to avoid an import cycle (flow/mgt -> flow/executor -> ou).
+type ouFlowResolver interface {
+	IsValidFlow(ctx context.Context, flowID string, flowType providers.FlowType) (bool, *tidcommon.ServiceError)
+}
+
 // ConfigurableOUService extends OrganizationUnitServiceInterface with methods for
 // two-phase initialization of resolvers. This is intentionally separate from the
 // main interface so consumers don't see bootstrap-only methods.
@@ -101,7 +108,7 @@ type ConfigurableOUService interface {
 	SetOUUserResolver(resolver OUUserResolver)
 	SetOUGroupResolver(resolver OUGroupResolver)
 	SetOURoleResolver(resolver OURoleResolver)
-	SetOUFlowResolver(resolver OUFlowResolver)
+	SetOUFlowResolver(resolver ouFlowResolver)
 	SetDependencyRegistry(r resourcedependency.Registry)
 	GetResourceDependencies(
 		ctx context.Context, resourceType, id string) ([]resourcedependency.ResourceDependency, error)
@@ -115,7 +122,7 @@ type organizationUnitService struct {
 	userResolver       OUUserResolver
 	groupResolver      OUGroupResolver
 	roleResolver       OURoleResolver
-	flowResolver       OUFlowResolver
+	flowResolver       ouFlowResolver
 	dependencyRegistry resourcedependency.Registry
 }
 
@@ -137,7 +144,7 @@ func (ous *organizationUnitService) SetOURoleResolver(resolver OURoleResolver) {
 	ous.roleResolver = resolver
 }
 
-func (ous *organizationUnitService) SetOUFlowResolver(resolver OUFlowResolver) {
+func (ous *organizationUnitService) SetOUFlowResolver(resolver ouFlowResolver) {
 	ous.flowResolver = resolver
 }
 
@@ -402,7 +409,6 @@ func (ous *organizationUnitService) CreateOrganizationUnit(
 			RecoveryFlowID:            request.RecoveryFlowID,
 			IsRecoveryFlowEnabled:     request.IsRecoveryFlowEnabled,
 			SignOutFlowID:             request.SignOutFlowID,
-			IsSignOutFlowEnabled:      request.IsSignOutFlowEnabled,
 			LogoURL:                   request.LogoURL,
 			TosURI:                    request.TosURI,
 			PolicyURI:                 request.PolicyURI,
@@ -719,7 +725,6 @@ func (ous *organizationUnitService) updateOUInternal(
 		RecoveryFlowID:            request.RecoveryFlowID,
 		IsRecoveryFlowEnabled:     request.IsRecoveryFlowEnabled,
 		SignOutFlowID:             request.SignOutFlowID,
-		IsSignOutFlowEnabled:      request.IsSignOutFlowEnabled,
 		LogoURL:                   request.LogoURL,
 		TosURI:                    request.TosURI,
 		PolicyURI:                 request.PolicyURI,

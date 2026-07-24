@@ -140,7 +140,6 @@ func (s *importService) importOrganizationUnit(
 		RecoveryFlowID:            req.RecoveryFlowID,
 		IsRecoveryFlowEnabled:     req.IsRecoveryFlowEnabled,
 		SignOutFlowID:             req.SignOutFlowID,
-		IsSignOutFlowEnabled:      req.IsSignOutFlowEnabled,
 		LogoURL:                   req.LogoURL,
 		TosURI:                    req.TosURI,
 		PolicyURI:                 req.PolicyURI,

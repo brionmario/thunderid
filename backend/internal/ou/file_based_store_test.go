@@ -520,7 +520,6 @@ func (s *FileBasedStoreTestSuite) TestCreateAndRetrieveWithDesignFields() {
 		RecoveryFlowID:            "recovery-flow-123",
 		IsRecoveryFlowEnabled:     true,
 		SignOutFlowID:             "signout-flow-123",
-		IsSignOutFlowEnabled:      true,
 		LogoURL:                   "https://example.com/logo.png",
 	}
 
@@ -538,7 +537,6 @@ func (s *FileBasedStoreTestSuite) TestCreateAndRetrieveWithDesignFields() {
 	assert.Equal(s.T(), "recovery-flow-123", retrieved.RecoveryFlowID)
 	assert.True(s.T(), retrieved.IsRecoveryFlowEnabled)
 	assert.Equal(s.T(), "signout-flow-123", retrieved.SignOutFlowID)
-	assert.True(s.T(), retrieved.IsSignOutFlowEnabled)
 	assert.Equal(s.T(), "https://example.com/logo.png", retrieved.LogoURL)
 }
 

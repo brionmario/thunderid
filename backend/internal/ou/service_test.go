@@ -272,7 +272,7 @@ func (suite *OrganizationUnitServiceTestSuite) newServiceWithRoleResolver(
 func (suite *OrganizationUnitServiceTestSuite) newServiceWithFlowResolver(
 	store *organizationUnitStoreInterfaceMock,
 	authzService *sysauthzmock.SystemAuthorizationServiceInterfaceMock,
-	flowResolver OUFlowResolver,
+	flowResolver ouFlowResolver,
 ) *organizationUnitService {
 	mtx := new(mockTransactioner)
 	mtx.On("Transact", mock.Anything, mock.Anything).Return(nil).Maybe()
@@ -440,7 +440,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_SetResolvers() {
 
 	userResolver := new(OUUserResolverMock)
 	groupResolver := new(OUGroupResolverMock)
-	flowResolver := NewOUFlowResolverMock(suite.T())
+	flowResolver := newOuFlowResolverMock(suite.T())
 
 	service.SetOUUserResolver(userResolver)
 	service.SetOUGroupResolver(groupResolver)
@@ -596,7 +596,6 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_CreateOrganizationU
 				RecoveryFlowID:            "recovery-flow-123",
 				IsRecoveryFlowEnabled:     true,
 				SignOutFlowID:             "signout-flow-123",
-				IsSignOutFlowEnabled:      true,
 				LogoURL:                   "https://example.com/logo.png",
 			},
 			setup: func(store *organizationUnitStoreInterfaceMock) {
@@ -616,7 +615,6 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_CreateOrganizationU
 							ou.RecoveryFlowID == "recovery-flow-123" &&
 							ou.IsRecoveryFlowEnabled &&
 							ou.SignOutFlowID == "signout-flow-123" &&
-							ou.IsSignOutFlowEnabled &&
 							ou.LogoURL == "https://example.com/logo.png"
 					})).
 					Return(nil).
@@ -656,7 +654,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_CreateOrganizationU
 
 func (suite *OrganizationUnitServiceTestSuite) TestOUService_CreateOrganizationUnit_InvalidDefaultFlow() {
 	store := newOrganizationUnitStoreInterfaceMock(suite.T())
-	flowResolver := NewOUFlowResolverMock(suite.T())
+	flowResolver := newOuFlowResolverMock(suite.T())
 	flowResolver.On("IsValidFlow", mock.Anything, "bad-auth-flow", providers.FlowTypeAuthentication).
 		Return(false, nil).Once()
 
@@ -988,7 +986,6 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_UpdateOrganizationU
 				RecoveryFlowID:            "recovery-flow-new",
 				IsRecoveryFlowEnabled:     true,
 				SignOutFlowID:             "signout-flow-new",
-				IsSignOutFlowEnabled:      true,
 				LogoURL:                   "https://example.com/new-logo.png",
 			},
 			setup: func(store *organizationUnitStoreInterfaceMock) {
@@ -1004,7 +1001,6 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_UpdateOrganizationU
 					RecoveryFlowID:            "recovery-flow-old",
 					IsRecoveryFlowEnabled:     false,
 					SignOutFlowID:             "signout-flow-old",
-					IsSignOutFlowEnabled:      false,
 					LogoURL:                   "https://example.com/old-logo.png",
 				}
 				store.On("GetOrganizationUnit", mock.Anything, "ou-1").
@@ -1026,7 +1022,6 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_UpdateOrganizationU
 				suite.Equal("recovery-flow-new", ou.RecoveryFlowID)
 				suite.True(ou.IsRecoveryFlowEnabled)
 				suite.Equal("signout-flow-new", ou.SignOutFlowID)
-				suite.True(ou.IsSignOutFlowEnabled)
 				suite.Equal("https://example.com/new-logo.png", ou.LogoURL)
 			},
 		},
@@ -1306,7 +1301,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_UpdateOrganizationU
 		Return(false).
 		Once()
 
-	flowResolver := NewOUFlowResolverMock(suite.T())
+	flowResolver := newOuFlowResolverMock(suite.T())
 	flowResolver.On("IsValidFlow", mock.Anything, "bad-signout-flow", providers.FlowTypeSignOut).
 		Return(false, nil).Once()
 
@@ -1821,7 +1816,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("empty flow IDs are not validated", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		service := &organizationUnitService{flowResolver: flowResolver}
 		err := service.validateDefaultFlows(context.Background(), providers.OrganizationUnitRequestWithID{})
 		suite.Require().Nil(err)
@@ -1829,7 +1824,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("all valid flows", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		flowResolver.On("IsValidFlow", mock.Anything, "auth-flow-1", providers.FlowTypeAuthentication).
 			Return(true, nil).Once()
 		flowResolver.On("IsValidFlow", mock.Anything, "reg-flow-1", providers.FlowTypeRegistration).
@@ -1851,7 +1846,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("invalid auth flow", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		flowResolver.On("IsValidFlow", mock.Anything, "bad-flow", providers.FlowTypeAuthentication).
 			Return(false, nil).Once()
 		service := &organizationUnitService{flowResolver: flowResolver}
@@ -1864,7 +1859,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("invalid registration flow", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		flowResolver.On("IsValidFlow", mock.Anything, "bad-flow", providers.FlowTypeRegistration).
 			Return(false, nil).Once()
 		service := &organizationUnitService{flowResolver: flowResolver}
@@ -1877,7 +1872,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("invalid recovery flow", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		flowResolver.On("IsValidFlow", mock.Anything, "bad-flow", providers.FlowTypeRecovery).
 			Return(false, nil).Once()
 		service := &organizationUnitService{flowResolver: flowResolver}
@@ -1890,7 +1885,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("invalid signout flow", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		flowResolver.On("IsValidFlow", mock.Anything, "bad-flow", providers.FlowTypeSignOut).
 			Return(false, nil).Once()
 		service := &organizationUnitService{flowResolver: flowResolver}
@@ -1903,7 +1898,7 @@ func (suite *OrganizationUnitServiceTestSuite) TestOUService_validateDefaultFlow
 	})
 
 	suite.Run("flow resolver server error propagates", func() {
-		flowResolver := NewOUFlowResolverMock(suite.T())
+		flowResolver := newOuFlowResolverMock(suite.T())
 		flowResolver.On("IsValidFlow", mock.Anything, "auth-flow-1", providers.FlowTypeAuthentication).
 			Return(false, &tidcommon.InternalServerError).Once()
 		service := &organizationUnitService{flowResolver: flowResolver}
