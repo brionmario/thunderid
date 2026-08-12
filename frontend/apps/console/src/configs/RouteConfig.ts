@@ -60,6 +60,9 @@ export interface ConsoleRoutePaths {
   settings: {
     list: () => string;
   };
+  signOut: {
+    list: () => string;
+  };
 }
 
 /**
@@ -120,6 +123,7 @@ export const ROUTE_SEGMENTS = {
   importConfiguration: 'import-configuration',
   welcome: 'welcome',
   settings: 'settings',
+  signOut: 'signing-out',
 } as const;
 
 const RouteConfig: RouteConfig = {
@@ -234,6 +238,9 @@ const RouteConfig: RouteConfig = {
   },
   settings: {
     list: () => `/${ROUTE_SEGMENTS.settings}`,
+  },
+  signOut: {
+    list: () => `/${ROUTE_SEGMENTS.signOut}`,
   },
 };
 

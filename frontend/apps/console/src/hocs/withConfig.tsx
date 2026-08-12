@@ -6,6 +6,7 @@ import {ThunderIDProvider} from '@thunderid/react';
 import type {ThunderIDProviderProps} from '@thunderid/react';
 import {merge} from '@thunderid/utils';
 import type {JSX, ComponentType} from 'react';
+import RouteConfig from '../configs/RouteConfig';
 
 export default function withConfig<P extends object>(WrappedComponent: ComponentType<P>) {
   return function WithConfig(props: P): JSX.Element {
@@ -84,10 +85,13 @@ export default function withConfig<P extends object>(WrappedComponent: Component
         baseUrl={getTrustedIssuerUrl() ?? (import.meta.env.VITE_THUNDER_BASE_URL as string)}
         clientId={getTrustedIssuerClientId() ?? (import.meta.env.VITE_THUNDER_CLIENT_ID as string)}
         afterSignInUrl={getClientUrl() ?? (import.meta.env.VITE_THUNDER_AFTER_SIGN_IN_URL as string)}
-        // Sign-out lands back on the console root, same as sign-in. Without this the SDK falls back
-        // to the page origin, which drops the client base path (e.g. `/console`) and fails the
-        // server's exact match against the application's registered post-logout redirect URIs.
-        afterSignOutUrl={getClientUrl() ?? (import.meta.env.VITE_THUNDER_AFTER_SIGN_IN_URL as string)}
+        // Sign-out lands back on SignOutPage (not the console root): that page knows to move on to
+        // sign-in once the session is clear, avoiding the flash of protected content that landing
+        // directly on the (still momentarily rendered) dashboard root would cause via ProtectedRoute's
+        // own immediate re-sign-in redirect. Without a base URL here the SDK falls back to the page
+        // origin, which drops the client base path (e.g. `/console`) and fails the server's exact
+        // match against the application's registered post-logout redirect URIs.
+        afterSignOutUrl={`${(getClientUrl() ?? (import.meta.env.VITE_THUNDER_AFTER_SIGN_IN_URL as string)).replace(/\/+$/, '')}${RouteConfig.signOut.list()}`}
         scopes={getTrustedIssuerScopes().length > 0 ? getTrustedIssuerScopes() : undefined}
         {...sdkProps}
       >

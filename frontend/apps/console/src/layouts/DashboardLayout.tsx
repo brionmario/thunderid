@@ -1,9 +1,7 @@
 // Copyright 2025-2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {useConfig} from '@thunderid/contexts';
-import {useLogger} from '@thunderid/logger/react';
-import {SignOutButton, User, useThunderID} from '@thunderid/react';
+import {User} from '@thunderid/react';
 import {
   AppShell,
   Box,
@@ -140,45 +138,8 @@ function SidebarPreference({collapsed}: {collapsed: boolean}): null {
 }
 
 export default function DashboardLayout({collapseSidebar = false}: DashboardLayoutProps): ReactNode {
-  const {clearSession, discovery} = useThunderID();
-  const {isTrustedIssuerGenericOidc, getTrustedIssuerClientId, getClientUrl} = useConfig();
   const {t} = useTranslation();
-  const logger = useLogger();
   const navigate = useNavigate();
-
-  const handleSignOut = (signOut: () => Promise<void>): void => {
-    if (isTrustedIssuerGenericOidc()) {
-      try {
-        clearSession();
-      } catch (error: unknown) {
-        logger.error('Failed to clear local session before IdP sign out', {error});
-      }
-
-      const endSessionEndpoint = discovery?.wellKnown?.end_session_endpoint;
-      if (!endSessionEndpoint) {
-        logger.warn('end_session_endpoint missing from IdP discovery document; ending local session only');
-        // eslint-disable-next-line react-hooks/immutability
-        window.location.href = getClientUrl();
-        return;
-      }
-
-      const logoutUrl = new URL(endSessionEndpoint);
-      logoutUrl.searchParams.set('client_id', getTrustedIssuerClientId());
-      logoutUrl.searchParams.set('post_logout_redirect_uri', getClientUrl());
-      // eslint-disable-next-line react-hooks/immutability
-      window.location.href = logoutUrl.toString();
-      return;
-    }
-
-    // Native ThunderID session: signOut() performs OIDC RP-Initiated Logout, the SDK's default
-    // behavior (no client config required). It clears the local session and redirects to ThunderID's
-    // end_session_endpoint, which confirms the sign-out, terminates the SSO session server-side, and
-    // returns to the console. It falls back to a local-only sign out when no end_session_endpoint is
-    // advertised.
-    signOut().catch((error: unknown) => {
-      logger.error('Sign out failed', {error});
-    });
-  };
 
   const appRoutes: NavCategory[] = useMemo(
     () => [
@@ -398,11 +359,12 @@ export default function DashboardLayout({collapseSidebar = false}: DashboardLayo
                       }}
                     />
                     <UserMenu.Divider />
-                    <SignOutButton>
-                      {({signOut}) => (
-                        <UserMenu.Logout label={t('common:userMenu.signOut')} onClick={() => handleSignOut(signOut)} />
-                      )}
-                    </SignOutButton>
+                    <UserMenu.Logout
+                      label={t('common:userMenu.signOut')}
+                      onClick={() => {
+                        void navigate(RouteConfig.signOut.list());
+                      }}
+                    />
                   </UserMenu>
                 );
               }}

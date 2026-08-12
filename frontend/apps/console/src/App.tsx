@@ -154,6 +154,7 @@ const ViewUserTypePage = lazy(() =>
 );
 const CreateProjectPage = lazy(() => import('./features/welcome/pages/CreateProjectPage'));
 const WelcomePage = lazy(() => import('./features/welcome/pages/WelcomePage'));
+const SignOutPage = lazy(() => import('./pages/SignOutPage'));
 
 export default function App(): JSX.Element {
   return (
@@ -163,6 +164,9 @@ export default function App(): JSX.Element {
           <WelcomeRedirect />
           <Suspense fallback={<PageLoader />}>
             <Routes>
+              {/* Not behind ProtectedRoute: reached mid sign-out, once the session may already be
+                  cleared, so a ProtectedRoute guard here would race sign-out with a fresh sign-in. */}
+              <Route path={ROUTE_SEGMENTS.signOut} element={<SignOutPage />} />
               <Route
                 path="/"
                 element={

@@ -169,7 +169,7 @@ describe('withConfig (console)', () => {
     mockGetClientId.mockReturnValue('client-id');
 
     render(<WithConfigComponent />);
-    expect(capturedProviderProps.afterSignOutUrl).toBe('https://custom-client.example.com/console');
+    expect(capturedProviderProps.afterSignOutUrl).toBe('https://custom-client.example.com/console/signing-out');
   });
 
   it('falls back to env VITE_THUNDER_BASE_URL when getTrustedIssuerUrl returns null', () => {
@@ -205,7 +205,7 @@ describe('withConfig (console)', () => {
     mockGetClientId.mockReturnValue('client-id');
 
     render(<WithConfigComponent />);
-    expect(capturedProviderProps.afterSignOutUrl).toBe('https://env-signin.example.com');
+    expect(capturedProviderProps.afterSignOutUrl).toBe('https://env-signin.example.com/signing-out');
   });
 
   it('passes scopes when getTrustedIssuerScopes returns a non-empty array', () => {
