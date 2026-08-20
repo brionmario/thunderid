@@ -98,18 +98,14 @@ func (h *refreshTokenGrantHandler) ValidateGrant(ctx context.Context, tokenReque
 	return nil
 }
 
-// HandleGrant processes the refresh token grant request and generates a new token response.
-func (h *refreshTokenGrantHandler) HandleGrant(ctx context.Context, tokenRequest *model.TokenRequest,
-	oauthApp *providers.OAuthClient) (
-	*model.TokenResponseDTO, *model.ErrorResponse) {
-	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, "RefreshTokenGrantHandler"))
-
-	// Validate refresh token using token validator
-	// ValidateRefreshToken verifies the token and enforces the RFC 7009 deny list. A revoked token is
-	// rejected as invalid_grant like any other invalid token; an unavailable deny list fails closed
-	// with a server_error.
-	refreshTokenClaims, err := h.tokenValidator.ValidateRefreshToken(
-		ctx, tokenRequest.RefreshToken, tokenRequest.ClientID)
+// resolveRefreshToken validates the presented refresh token and confirms it was issued to the
+// requesting client. ValidateRefreshToken enforces the RFC 7009 deny list, so a revoked token is
+// rejected as invalid_grant like any other invalid token and an unavailable deny list fails closed
+// with a server_error.
+func (h *refreshTokenGrantHandler) resolveRefreshToken(ctx context.Context,
+	tokenRequest *model.TokenRequest, logger *log.Logger) (
+	*tokenservice.RefreshTokenClaims, *model.ErrorResponse) {
+	refreshTokenClaims, err := h.tokenValidator.ValidateRefreshToken(ctx, tokenRequest.RefreshToken)
 	if err != nil {
 		logger.Debug(ctx, "Failed to validate refresh token", log.Error(err))
 		if errors.Is(err, revocation.ErrEnforcementUnavailable) {
@@ -127,6 +123,29 @@ func (h *refreshTokenGrantHandler) HandleGrant(ctx context.Context, tokenRequest
 			Error:            constants.ErrorInvalidGrant,
 			ErrorDescription: "Invalid refresh token",
 		}
+	}
+
+	// A client may only redeem refresh tokens issued to it.
+	if refreshTokenClaims.ClientID != tokenRequest.ClientID {
+		logger.Debug(ctx, "Refresh token does not belong to the requesting client")
+		return nil, &model.ErrorResponse{
+			Error:            constants.ErrorInvalidGrant,
+			ErrorDescription: "Invalid refresh token",
+		}
+	}
+
+	return refreshTokenClaims, nil
+}
+
+// HandleGrant processes the refresh token grant request and generates a new token response.
+func (h *refreshTokenGrantHandler) HandleGrant(ctx context.Context, tokenRequest *model.TokenRequest,
+	oauthApp *providers.OAuthClient) (
+	*model.TokenResponseDTO, *model.ErrorResponse) {
+	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, "RefreshTokenGrantHandler"))
+
+	refreshTokenClaims, errResp := h.resolveRefreshToken(ctx, tokenRequest, logger)
+	if errResp != nil {
+		return nil, errResp
 	}
 
 	if errResp := dpop.VerifyProofBinding(ctx, refreshTokenClaims.DPoPJkt, "refresh token"); errResp != nil {
@@ -293,7 +312,8 @@ func (h *refreshTokenGrantHandler) HandleGrant(ctx context.Context, tokenRequest
 			refreshTokenClaims.Sub, audiences,
 			refreshTokenClaims.GrantType, newTokenScopes,
 			refreshTokenClaims.ClaimsRequest, refreshTokenClaims.ClaimsLocales,
-			refreshTokenClaims.AttributeCacheID, refreshTokenClaims.TokenFamilyID)
+			refreshTokenClaims.AttributeCacheID, refreshTokenClaims.TokenFamilyID,
+			refreshTokenClaims.Exp)
 		if errResp != nil && errResp.Error != "" {
 			logger.Error(ctx, "Failed to issue refresh token", log.String("error", errResp.Error))
 			return nil, errResp
@@ -322,8 +342,8 @@ func (h *refreshTokenGrantHandler) HandleGrant(ctx context.Context, tokenRequest
 		}
 	}
 
-	if errResp := h.extendCacheTTL(ctx, cacheEntry, oauthApp, refreshTokenClaims.Iat,
-		accessToken.ExpiresIn, renewRefreshToken, refreshTokenClaims.AttributeCacheID,
+	if errResp := h.extendCacheTTL(ctx, cacheEntry, refreshTokenClaims.Exp,
+		accessToken.ExpiresIn, refreshTokenClaims.AttributeCacheID,
 		logger); errResp != nil {
 		return nil, errResp
 	}
@@ -367,8 +387,10 @@ func (h *refreshTokenGrantHandler) IssueRefreshToken(
 	claimsLocales string,
 	attributeCacheID string,
 	tokenFamilyID string,
+	expiresAt int64,
 ) *model.ErrorResponse {
 	tokenCtx := &tokenservice.RefreshTokenBuildContext{
+		ExpiresAt:            expiresAt,
 		ClientID:             oauthApp.ClientID,
 		Scopes:               scopes,
 		GrantType:            grantType,
@@ -412,7 +434,7 @@ func dpopJktForRefresh(ctx context.Context, oauthApp *providers.OAuthClient) str
 
 // extendCacheTTL extends the attribute cache TTL when the desired lifetime exceeds what is already
 // stored. The desired TTL is the larger of:
-//   - the refresh token's actual expiry (iat + validity; for a renewed token, iat = now)
+//   - the refresh token's expiry, which a rotated token inherits, so it is the same either way
 //   - the newly issued access token's expiry (now + ExpiresIn)
 //
 // This ensures the cache outlives whichever token lives longest without needlessly
@@ -420,9 +442,7 @@ func dpopJktForRefresh(ctx context.Context, oauthApp *providers.OAuthClient) str
 func (h *refreshTokenGrantHandler) extendCacheTTL(
 	ctx context.Context,
 	cacheEntry *attributecache.AttributeCache,
-	oauthApp *providers.OAuthClient,
-	refreshIat, accessExpiresIn int64,
-	renewRefreshToken bool,
+	refreshExpiry, accessExpiresIn int64,
 	cacheID string,
 	logger *log.Logger,
 ) *model.ErrorResponse {
@@ -430,12 +450,6 @@ func (h *refreshTokenGrantHandler) extendCacheTTL(
 		return nil
 	}
 	now := time.Now().Unix()
-	refreshValidity := tokenservice.ResolveTokenConfig(
-		h.cfg, oauthApp, tokenservice.TokenTypeRefresh, 0).ValidityPeriod
-	if renewRefreshToken {
-		refreshIat = now // newly issued token starts from now
-	}
-	refreshExpiry := refreshIat + refreshValidity
 	accessExpiry := now + accessExpiresIn
 	maxExpiry := refreshExpiry
 	if accessExpiry > maxExpiry {

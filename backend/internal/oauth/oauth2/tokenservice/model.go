@@ -77,6 +77,10 @@ type RefreshTokenBuildContext struct {
 	// TokenFamilyID, when set, is stamped as the `tfid` claim on the refresh token. It is copied
 	// unchanged across rotation so every token of the grant shares one family id.
 	TokenFamilyID string
+	// ExpiresAt, when set, is the Unix expiry the rotated token inherits from the token it replaces,
+	// so a grant cannot outlive its original issuance window. Zero starts a fresh validity period,
+	// which is what first issuance does.
+	ExpiresAt int64
 }
 
 // IDJAGBuildContext contains all the information needed to build an ID-JAG (Identity Assertion
@@ -108,6 +112,7 @@ type IDTokenBuildContext struct {
 // RefreshTokenClaims represents the validated claims from a refresh token.
 type RefreshTokenClaims struct {
 	Sub              string
+	ClientID         string
 	Audiences        []string
 	GrantType        string
 	Scopes           []string
@@ -126,6 +131,7 @@ type RefreshTokenClaims struct {
 	// tokens minted during rotation so the family stays intact, and used to revoke the whole family on
 	// reuse. Empty for pre-rollout tokens.
 	TokenFamilyID string
+	Claims        map[string]interface{}
 }
 
 // SubjectTokenClaims represents the validated claims from a subject token (for token exchange).
