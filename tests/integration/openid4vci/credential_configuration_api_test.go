@@ -31,12 +31,16 @@ const (
 	codeConfigUnsupportedFormat = "VCI-2004"
 	codeConfigImmutable         = "VCI-2005"
 	codeConfigInvalidOU         = "VCI-2007"
+	codeConfigEmptyClaimName    = "VCI-2008"
+	codeConfigDuplicateClaim    = "VCI-2009"
+	codeConfigReservedClaim     = "VCI-2010"
 
 	// Declarative (file-backed) configurations seeded from
 	// resources/declarative_resources/credential_configurations. They are
 	// immutable: the management API must reject updates and deletes.
 	declConfigID     = "decl-credential-config-1"
 	declConfigHandle = "decl_credential_config_1"
+	declConfigOUID   = "decl-ou-1"
 	declConfigVCT    = "https://credentials.thunderid.local/DeclarativeTestCredential"
 )
 
@@ -401,6 +405,30 @@ func (ts *CredentialConfigurationAPITestSuite) TestCreate_ValidationErrors() {
 			},
 			wantCode: codeConfigInvalidOU,
 		},
+		{
+			name: "empty claim name",
+			mutate: func(c *testutils.CredentialConfiguration) {
+				c.Claims = []testutils.ClaimMapping{{Name: "  ", DisplayName: "Blank"}}
+			},
+			wantCode: codeConfigEmptyClaimName,
+		},
+		{
+			name: "duplicate claim name",
+			mutate: func(c *testutils.CredentialConfiguration) {
+				c.Claims = []testutils.ClaimMapping{
+					{Name: "given_name", DisplayName: "Given Name"},
+					{Name: "given_name", DisplayName: "Given Name Again"},
+				}
+			},
+			wantCode: codeConfigDuplicateClaim,
+		},
+		{
+			name: "reserved claim name",
+			mutate: func(c *testutils.CredentialConfiguration) {
+				c.Claims = []testutils.ClaimMapping{{Name: "vct", DisplayName: "Reserved"}}
+			},
+			wantCode: codeConfigReservedClaim,
+		},
 	}
 
 	for i, tc := range cases {
@@ -451,6 +479,7 @@ func (ts *CredentialConfigurationAPITestSuite) TestDeclarativeVisibility() {
 	ts.Equal(declConfigHandle, fetched["handle"])
 	ts.Equal(declConfigVCT, fetched["vct"])
 	ts.Equal("dc+sd-jwt", fetched["format"])
+	ts.Equal(declConfigOUID, fetched["ouId"], "the ouId declared in YAML must survive the load")
 
 	ts.Equal("Declarative Test Credential", fetched["name"])
 	ts.Equal("A declarative credential configuration", fetched["description"])

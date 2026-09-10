@@ -64,6 +64,7 @@ func ResolveTokenConfig(
 			if oauthApp.Token.IDToken.ValidityPeriod > 0 {
 				tokenConfig.ValidityPeriod = oauthApp.Token.IDToken.ValidityPeriod
 			}
+			tokenConfig.SigningAlg = oauthApp.Token.IDToken.SigningAlg
 		}
 	case TokenTypeRefresh:
 		if cfg.OAuth.RefreshToken.ValidityPeriod > 0 {
@@ -247,6 +248,11 @@ func FetchUserAttributes(
 
 	// Helper to check if a claim should be included
 	shouldInclude := func(claimName string) bool {
+		// An opaque JWT/JWE from the identity system is not a configured claim, so it is never
+		// gated by the allow-list.
+		if claimName == providers.RawJWTAttributeKey {
+			return true
+		}
 		if len(allowedClaims) == 0 {
 			return false // Only add special claims if explicitly allowed
 		}
@@ -404,7 +410,21 @@ func ReservedAccessTokenClaimNames() map[string]bool {
 	reserved[constants.ClaimOUHandle] = true
 	reserved[constants.ClaimClaimsRequest] = true
 	reserved[constants.ClaimClaimsLocales] = true
+	reserved[constants.ClaimSubType] = true
+	reserved[constants.ClaimIDP] = true
+	reserved[constants.ClaimTokenFamilyID] = true
 	return reserved
+}
+
+// builderOwnedClaimNames returns the access-token claims the builder writes itself, so a configured
+// attribute can never supply one. The reserved set minus the OU claims, which a user-subject token
+// legitimately receives through the attribute channel.
+func builderOwnedClaimNames() map[string]bool {
+	owned := ReservedAccessTokenClaimNames()
+	delete(owned, constants.ClaimOUID)
+	delete(owned, constants.ClaimOUName)
+	delete(owned, constants.ClaimOUHandle)
+	return owned
 }
 
 // FilterAttributesByAllowList returns the subset of attrs whose keys are listed in the given

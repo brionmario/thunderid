@@ -10,7 +10,7 @@
 name: Forward-port Merged PRs
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
     branches:
       # Patch branches whose merged PRs get forward-ported to main.
@@ -100,7 +100,7 @@ jobs:
           done
           set -e
 
-          git push origin "${FORWARD_BRANCH}"
+          git push --force origin "${FORWARD_BRANCH}"
 
           {
             echo "forward_branch=${FORWARD_BRANCH}"
@@ -161,6 +161,7 @@ jobs:
           ORIGINAL_URL: ${{ github.event.pull_request.html_url }}
           ORIGINAL_BODY: ${{ github.event.pull_request.body }}
         with:
+          github-token: ${{ secrets.THUNDER_AUTOMATION_BOT }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;

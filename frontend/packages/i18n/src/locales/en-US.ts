@@ -1121,6 +1121,7 @@ const translations = {
     'edit.page.errorTitle': 'Failed to load agent',
     'edit.page.notFound': 'Agent not found',
     'edit.page.back': 'Back to agents',
+    'edit.page.logoUpdate.label': 'Update Logo',
     'edit.page.description.empty': 'No description',
     'edit.page.description.placeholder': 'Add a description',
     'edit.page.tabs.overview': 'Overview',
@@ -3591,6 +3592,9 @@ const translations = {
     'core.executions.consent.timeout.label': 'Consent Timeout (seconds)',
     'core.executions.consent.timeout.placeholder': '0',
     'core.executions.consent.timeout.hint': 'Time in seconds before the consent request expires. Use 0 for no timeout.',
+    'core.executions.consent.failOnDeny.label': 'Fail flow when user denies consent',
+    'core.executions.consent.failOnDeny.hint':
+      'When enabled, the flow fails if the user denies the consent prompt or lets it time out, even if all requested attributes and permissions are optional.',
 
     // Identifying executor modes
     'core.executions.identifying.mode.identify': 'Identify',
@@ -3805,6 +3809,7 @@ const translations = {
     'core.validation.fields.input.idpName': 'Identity provider name is required',
     'core.validation.fields.input.idpId': 'Connection is required',
     'core.validation.fields.input.senderId': 'Notification sender is required',
+    'core.validation.fields.input.presentationDefinitionId': 'Presentation definition is required',
     'core.validation.fields.input.label': 'Label is required',
     'core.validation.fields.input.ref': 'Attribute is required',
 
@@ -5006,6 +5011,7 @@ const translations = {
     'claims.name': 'Claim',
     'claims.nameHint':
       'The claim path to request from the wallet, and whether it must be disclosed (Mandatory) or may be withheld (Optional).',
+    'claims.errors.duplicate': 'This claim is already requested. Each claim can be listed only once.',
     'claims.requirement': 'Requirement',
     'claims.mandatory': 'Mandatory',
     'claims.optional': 'Optional',
@@ -5140,6 +5146,8 @@ const translations = {
     'claims.name': 'Attribute Name',
     'claims.displayName': 'Display Name',
     'claims.nameHint': 'Must match a user profile attribute name; the value is sourced from the user.',
+    'claims.errors.duplicate': 'This attribute is already added. Each attribute can be listed only once.',
+    'claims.errors.reserved': 'This name is reserved by the credential format and cannot be used as an attribute.',
 
     // Offer dialog
     'offer.title': 'Credential Offer',

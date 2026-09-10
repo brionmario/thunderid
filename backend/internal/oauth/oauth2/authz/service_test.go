@@ -45,7 +45,7 @@ func authorizeServiceCfgFromRuntime() oauthconfig.Config {
 	runtime := config.GetServerRuntime()
 	return oauthconfig.Config{
 		JWT:        runtime.Config.JWT,
-		OAuth:      runtime.Config.OAuth,
+		OAuth:      runtime.Config.OAuth.ToEngineConfig(),
 		GateClient: runtime.Config.GateClient,
 	}
 }
@@ -120,7 +120,7 @@ func (suite *AuthorizeServiceTestSuite) BeforeTest(suiteName, testName string) {
 		JWT: engineconfig.JWTConfig{
 			Issuer: "https://localhost:8090",
 		},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
 		},
 	}
@@ -252,6 +252,67 @@ func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_In
 	assert.Equal(suite.T(), oauth2const.ErrorInvalidRequest, authErr.Code)
 }
 
+// A request_uri that is not a PAR handle is a client-supplied request object by reference
+// (RFC 9101), which is not supported. It must be rejected with request_uri_not_supported and
+// returned to the client's redirect_uri, rather than resolved as a PAR handle or ignored.
+func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_RequestURINotSupported() {
+	app := suite.testApp()
+	suite.mockInboundClient.EXPECT().GetOAuthClientByClientID(mock.Anything, "test-client-id").Return(app, nil)
+
+	msg := suite.testMsg()
+	msg.RequestQueryParams["request_uri"] = []string{"https://client.example.org/request.jwt"}
+
+	svc := suite.newService()
+	result, authErr := svc.HandleInitialAuthorizationRequest(context.Background(), msg)
+
+	assert.Nil(suite.T(), result)
+	assert.NotNil(suite.T(), authErr)
+	assert.Equal(suite.T(), oauth2const.ErrorRequestURINotSupported, authErr.Code)
+	assert.True(suite.T(), authErr.SendErrorToClient)
+	assert.Equal(suite.T(), "https://client.example.com/callback", authErr.ClientRedirectURI)
+	assert.Equal(suite.T(), "test-state", authErr.State)
+}
+
+// An unregistered redirect_uri must not be used as a redirect target, so the rejection goes to
+// the error page instead.
+func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_RequestURINotSupported_BadRedirectURI() {
+	app := suite.testApp()
+	suite.mockInboundClient.EXPECT().GetOAuthClientByClientID(mock.Anything, "test-client-id").Return(app, nil)
+
+	msg := suite.testMsg()
+	msg.RequestQueryParams["request_uri"] = []string{"https://client.example.org/request.jwt"}
+	msg.RequestQueryParams["redirect_uri"] = []string{"https://attacker.example.com/callback"}
+
+	svc := suite.newService()
+	result, authErr := svc.HandleInitialAuthorizationRequest(context.Background(), msg)
+
+	assert.Nil(suite.T(), result)
+	assert.NotNil(suite.T(), authErr)
+	assert.Equal(suite.T(), oauth2const.ErrorRequestURINotSupported, authErr.Code)
+	assert.False(suite.T(), authErr.SendErrorToClient)
+	assert.Empty(suite.T(), authErr.ClientRedirectURI)
+}
+
+// An omitted redirect_uri falls back to the single registered one, so the rejection still
+// reaches the client.
+func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_RequestURINotSupported_NoRedirectURI() {
+	app := suite.testApp()
+	suite.mockInboundClient.EXPECT().GetOAuthClientByClientID(mock.Anything, "test-client-id").Return(app, nil)
+
+	msg := suite.testMsg()
+	msg.RequestQueryParams["request_uri"] = []string{"https://client.example.org/request.jwt"}
+	delete(msg.RequestQueryParams, "redirect_uri")
+
+	svc := suite.newService()
+	result, authErr := svc.HandleInitialAuthorizationRequest(context.Background(), msg)
+
+	assert.Nil(suite.T(), result)
+	assert.NotNil(suite.T(), authErr)
+	assert.Equal(suite.T(), oauth2const.ErrorRequestURINotSupported, authErr.Code)
+	assert.True(suite.T(), authErr.SendErrorToClient)
+	assert.Equal(suite.T(), "https://client.example.com/callback", authErr.ClientRedirectURI)
+}
+
 func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_ValidationError_NoClientRedirect() {
 	app := suite.testApp()
 	suite.mockInboundClient.EXPECT().GetOAuthClientByClientID(mock.Anything, "test-client-id").Return(app, nil)
@@ -346,6 +407,25 @@ func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_Su
 	assert.Equal(suite.T(), testAuthID, result.QueryParams[oauth2const.AuthID])
 	assert.Equal(suite.T(), "test-app-id", result.QueryParams[oauth2const.AppID])
 	assert.Equal(suite.T(), "test-flow-id", result.QueryParams[oauth2const.ExecutionID])
+}
+
+func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_Success_WithUILocales() {
+	app := suite.testApp()
+	suite.mockInboundClient.EXPECT().GetOAuthClientByClientID(mock.Anything, "test-client-id").Return(app, nil)
+	suite.mockValidator.On("validateInitialAuthorizationRequest", mock.Anything, mock.Anything, app).
+		Return(false, "", "")
+	suite.mockFlowExecService.EXPECT().InitiateFlow(mock.Anything, mock.Anything).Return("test-flow-id", nil)
+	suite.mockAuthReqStore.EXPECT().AddRequest(mock.Anything, mock.Anything).Return(testAuthID, nil)
+
+	msg := suite.testMsg()
+	msg.RequestQueryParams["ui_locales"] = []string{"hi"}
+
+	svc := suite.newService()
+	result, authErr := svc.HandleInitialAuthorizationRequest(context.Background(), msg)
+
+	assert.Nil(suite.T(), authErr)
+	assert.NotNil(suite.T(), result)
+	assert.Equal(suite.T(), "hi", result.QueryParams[oauth2const.RequestParamUILocales])
 }
 
 func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_ExplicitResourceSetsRuntimeRSID() {
@@ -1803,7 +1883,7 @@ func (suite *AuthorizeServiceTestSuite) TestResolveAttrCacheTTL_RefreshAllowed_U
 	config.ResetServerRuntime()
 	_ = config.InitializeServerRuntime("test", &config.Config{
 		JWT: engineconfig.JWTConfig{ValidityPeriod: 900},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			RefreshToken:      engineconfig.RefreshTokenConfig{ValidityPeriod: 7200},
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
 		},
@@ -1829,7 +1909,7 @@ func (suite *AuthorizeServiceTestSuite) TestResolveAttrCacheTTL_RefreshTokenAllo
 	config.ResetServerRuntime()
 	_ = config.InitializeServerRuntime("test", &config.Config{
 		JWT: engineconfig.JWTConfig{ValidityPeriod: 900},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			RefreshToken:      engineconfig.RefreshTokenConfig{ValidityPeriod: 1800},
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
 		},
@@ -1855,7 +1935,7 @@ func (suite *AuthorizeServiceTestSuite) TestResolveUserAttributesCacheTTL_Refres
 	config.ResetServerRuntime()
 	_ = config.InitializeServerRuntime("test", &config.Config{
 		JWT: engineconfig.JWTConfig{ValidityPeriod: 900},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			// RefreshToken.ValidityPeriod is 0 → ResolveTokenConfig falls back to global JWT validity.
 			RefreshToken:      engineconfig.RefreshTokenConfig{ValidityPeriod: 0},
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
@@ -1891,7 +1971,7 @@ func (suite *AuthorizeServiceTestSuite) TestResolveAttrCacheTTL_NoRefreshToken_Z
 	config.ResetServerRuntime()
 	_ = config.InitializeServerRuntime("test", &config.Config{
 		JWT: engineconfig.JWTConfig{ValidityPeriod: 900},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
 		},
 	})
@@ -1914,7 +1994,7 @@ func (suite *AuthorizeServiceTestSuite) TestResolveAttrCacheTTL_NoRefreshToken_N
 	config.ResetServerRuntime()
 	_ = config.InitializeServerRuntime("test", &config.Config{
 		JWT: engineconfig.JWTConfig{ValidityPeriod: 900},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
 		},
 	})
@@ -1932,7 +2012,7 @@ func (suite *AuthorizeServiceTestSuite) TestResolveAttrCacheTTL_NoRefreshToken_N
 	config.ResetServerRuntime()
 	_ = config.InitializeServerRuntime("test", &config.Config{
 		JWT: engineconfig.JWTConfig{ValidityPeriod: 900},
-		OAuth: engineconfig.OAuthConfig{
+		OAuth: config.OAuthConfig{
 			AuthorizationCode: engineconfig.AuthorizationCodeConfig{ValidityPeriod: 600},
 		},
 	})

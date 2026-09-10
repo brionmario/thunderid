@@ -31,12 +31,15 @@ const (
 	codeDefinitionUnsupportedFormat = "VP-2004"
 	codeDefinitionImmutable         = "VP-2005"
 	codeDefinitionInvalidOU         = "VP-2007"
+	codeDefinitionEmptyClaimName    = "VP-2008"
+	codeDefinitionDuplicateClaim    = "VP-2009"
 
 	// Declarative (file-backed) definitions seeded from
 	// resources/declarative_resources/presentation_definitions. They are
 	// immutable: the management API must reject updates and deletes.
 	declDefinitionID     = "decl-presentation-def-1"
 	declDefinitionHandle = "decl_presentation_def_1"
+	declDefinitionOUID   = "decl-ou-1"
 	declDefinitionVCT    = "https://credentials.thunderid.local/DeclarativeTestCredential"
 )
 
@@ -401,6 +404,42 @@ func (ts *PresentationDefinitionAPITestSuite) TestCreate_ValidationErrors() {
 			},
 			wantCode: codeDefinitionInvalidOU,
 		},
+		{
+			name: "empty claim name",
+			mutate: func(d *testutils.PresentationDefinition) {
+				d.MandatoryClaims = []string{"  "}
+			},
+			wantCode: codeDefinitionEmptyClaimName,
+		},
+		{
+			name: "duplicate claim within a list",
+			mutate: func(d *testutils.PresentationDefinition) {
+				d.MandatoryClaims = []string{"given_name", "given_name"}
+			},
+			wantCode: codeDefinitionDuplicateClaim,
+		},
+		{
+			name: "claim both mandatory and optional",
+			mutate: func(d *testutils.PresentationDefinition) {
+				d.MandatoryClaims = []string{"given_name"}
+				d.OptionalClaims = []string{"given_name"}
+			},
+			wantCode: codeDefinitionDuplicateClaim,
+		},
+		{
+			name: "empty requested claim name",
+			mutate: func(d *testutils.PresentationDefinition) {
+				d.RequestedClaims = []string{"  "}
+			},
+			wantCode: codeDefinitionEmptyClaimName,
+		},
+		{
+			name: "duplicate requested claim",
+			mutate: func(d *testutils.PresentationDefinition) {
+				d.RequestedClaims = []string{"given_name", "given_name"}
+			},
+			wantCode: codeDefinitionDuplicateClaim,
+		},
 	}
 
 	for i, tc := range cases {
@@ -451,6 +490,7 @@ func (ts *PresentationDefinitionAPITestSuite) TestDeclarativeVisibility() {
 	ts.Equal(declDefinitionHandle, fetched["handle"])
 	ts.Equal(declDefinitionVCT, fetched["vct"])
 	ts.Equal("dc+sd-jwt", fetched["format"])
+	ts.Equal(declDefinitionOUID, fetched["ouId"], "the ouId declared in YAML must survive the load")
 
 	requested, ok := fetched["requestedClaims"].([]any)
 	ts.Require().Truef(ok, "requestedClaims missing: %s", string(res.Body))
