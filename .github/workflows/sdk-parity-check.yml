@@ -73,6 +73,13 @@ jobs:
             const RAISED_LABEL = 'parity/prs-raised';
             const NOT_NEEDED_LABEL = 'parity/prs-not-needed';
             const SPEC = 'https://github.com/thunder-id/thunderid/blob/main/docs-internals/sdk-development/spec.md';
+            const UNACCOUNTED_HEADING = 'Still unaccounted for:';
+            // Only a pull request event can set the check's status, so only those runs record
+            // what it was set to. A comment run carries the previous value through untouched,
+            // which is what lets it tell "the check is red and my reply just fixed that" from
+            // "the check is already green".
+            const GATE_RED = '<!-- thunderid-parity-gate:red -->';
+            const GATE_GREEN = '<!-- thunderid-parity-gate:green -->';
 
             // Every ThunderID SDK repository. The one the check is running in drops out below, so
             // this list is identical in all four and there is no per repository input to keep in
@@ -126,6 +133,9 @@ jobs:
               per_page: 100,
             });
             const existing = comments.find(comment => comment.body && comment.body.includes(MARKER));
+            // Read before the comment is rewritten below. A thread with no comment yet has never
+            // had a passing check, so it counts as red.
+            const gateWasRed = !existing || !existing.body.includes(GATE_GREEN);
 
             // Everywhere a port link could have been written: the pull request description and
             // every reply on the thread, minus this check's own comment.
@@ -279,8 +289,14 @@ jobs:
                 '',
                 detected,
                 unaccounted.length
-                  ? `\nStill unaccounted for: ${unaccounted.map(port => `\`${port.repo}\``).join(', ')}. This check stays red until each one has a linked pull request, a linked tracked issue, or a line saying it does not apply.\n`
-                  : '\nEvery sibling SDK is accounted for.\n',
+                  ? `\n${UNACCOUNTED_HEADING} ${unaccounted.map(port => `\`${port.repo}\``).join(', ')}. This check stays red until each one has a linked pull request, a linked tracked issue, or a line saying it does not apply.\n`
+                  // A reply cannot turn the check green: a comment run is not part of the check
+                  // suite, and a label re-applied by this workflow's own token triggers nothing.
+                  // Say what does clear it rather than leaving the author staring at a red check
+                  // under a comment that says everything is accounted for.
+                  : gateWasRed && context.eventName === 'issue_comment'
+                    ? '\nEvery sibling SDK is accounted for. The check cannot turn itself green from a reply: re-run it, push to the branch, or re-apply the label, and it will clear.\n'
+                    : '\nEvery sibling SDK is accounted for.\n',
                 howToReply,
                 '',
                 unaccountedFor,
@@ -293,6 +309,13 @@ jobs:
                 `This pull request is labelled \`${NOT_NEEDED_LABEL}\`: nothing here has to ship in the other ThunderID SDKs. If that changes, swap the label for \`${RAISED_LABEL}\`.`,
               ].join('\n');
             }
+
+            // A comment run cannot change the status, so it must not claim to: it carries the
+            // marker the last pull request run left behind.
+            const gateMarker = context.eventName === 'issue_comment'
+              ? (gateWasRed ? GATE_RED : GATE_GREEN)
+              : (failure ? GATE_RED : GATE_GREEN);
+            body = `${body}\n${gateMarker}`;
 
             if (existing) {
               if (existing.body !== body) {
