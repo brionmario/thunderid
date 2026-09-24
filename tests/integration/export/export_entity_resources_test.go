@@ -31,9 +31,10 @@ import (
 type ExportEntityResourcesTestSuite struct {
 	suite.Suite
 
-	ouID       string
-	userTypeID string
-	userID     string
+	ouID              string
+	userTypeID        string
+	userID            string
+	agentTypeSnapshot *testutils.AgentTypeSnapshot
 }
 
 const (
@@ -80,6 +81,12 @@ func (ts *ExportEntityResourcesTestSuite) SetupSuite() {
 	ts.userTypeID = userTypeID
 
 	// The server allows a single `default` agent type, shared across suites and never deleted.
+	// Snapshot it before pointing it at this suite's OU, so teardown can put it back before that
+	// OU is deleted.
+	snapshot, err := testutils.SnapshotAgentType()
+	ts.Require().NoError(err, "Failed to snapshot the agent type")
+	ts.agentTypeSnapshot = snapshot
+
 	_, err = testutils.CreateAgentType(testutils.UserType{
 		OUID: ts.ouID,
 		Schema: map[string]interface{}{
@@ -103,6 +110,13 @@ func (ts *ExportEntityResourcesTestSuite) SetupSuite() {
 
 func (ts *ExportEntityResourcesTestSuite) TearDownSuite() {
 	ts.clearTranslationLanguage()
+
+	// Restored before the OU is deleted, so the singleton is never left pointing at a missing OU.
+	if ts.agentTypeSnapshot != nil {
+		if err := testutils.RestoreAgentType(ts.agentTypeSnapshot); err != nil {
+			ts.T().Errorf("teardown: failed to restore the default agent type: %v", err)
+		}
+	}
 
 	if ts.userID != "" {
 		if err := testutils.DeleteUser(ts.userID); err != nil {
@@ -198,13 +212,44 @@ func (ts *ExportEntityResourcesTestSuite) TestUserExportParameterizesCredentials
 	ts.Assert().NotContains(yamlContent, entityExportPassword,
 		"an exported user must not carry its plaintext credential")
 
-	// The exporter currently omits the credentials block entirely rather than emitting the template
-	// variable its DynamicPropertyFields declaration implies, so the assertion above holds because
-	// the field is dropped rather than because it is parameterized. Pinned here so the distinction
-	// is visible: if the exporter starts emitting a placeholder, this assertion should become a
-	// positive check for it.
-	ts.Assert().NotContains(yamlContent, "credentials:",
-		"the exporter omits credentials today; revisit this test if it starts parameterizing them")
+	// The credential leaves as the template variable its DynamicPropertyFields declaration implies,
+	// so the assertion above holds because the field is parameterized rather than dropped.
+	ts.Assert().Contains(yamlContent, "credentials:",
+		"an exported user must carry its credentials block")
+	ts.Assert().Contains(yamlContent, `password: "{{.USER_EXPORT_ENTITY_USER_PASSWORD}}"`,
+		"the credential must leave as a template variable")
+}
+
+// TestUserExportRefusesTwoUsersWithOneVariableName verifies an export that cannot represent both
+// users is refused rather than returned.
+//
+// A user's password placeholder is named after the username, so two usernames that normalize to the
+// same name claim one variable. Returning that bundle would import both users with the same password,
+// and dropping one silently would leave a bundle that looks complete.
+func (ts *ExportEntityResourcesTestSuite) TestUserExportRefusesTwoUsersWithOneVariableName() {
+	first, err := testutils.CreateUser(testutils.User{
+		Type: entityExportUserTypeName,
+		OUID: ts.ouID,
+		Attributes: json.RawMessage(
+			`{"username": "clash@example.com", "password": "ExportEntity@123", "email": "a@example.com"}`),
+	})
+	ts.Require().NoError(err, "Failed to create the first user")
+	defer func() { _ = testutils.DeleteUser(first) }()
+
+	second, err := testutils.CreateUser(testutils.User{
+		Type: entityExportUserTypeName,
+		OUID: ts.ouID,
+		Attributes: json.RawMessage(
+			`{"username": "clash.example.com", "password": "ExportEntity@123", "email": "b@example.com"}`),
+	})
+	ts.Require().NoError(err, "Failed to create the second user")
+	defer func() { _ = testutils.DeleteUser(second) }()
+
+	_, err = ts.exportResourcesYAML(ExportRequest{Users: []string{first, second}})
+
+	ts.Require().Error(err, "expected the export to be refused")
+	ts.Assert().Contains(err.Error(), "EXP-1003",
+		"the refusal must name the duplicate template variable error")
 }
 
 // TestUserExportWithWildcard verifies the wildcard form enumerates users and includes the fixture.

@@ -97,6 +97,7 @@ func (h *agentHandler) HandleAgentPostRequest(w http.ResponseWriter, r *http.Req
 			Assertion:                 req.Assertion,
 			LoginConsent:              req.LoginConsent,
 			AllowedUserTypes:          req.AllowedUserTypes,
+			AllowedAgentTypes:         req.AllowedAgentTypes,
 			PasskeyAllowedOrigins:     req.PasskeyAllowedOrigins,
 			Attestation:               req.Attestation,
 		},
@@ -274,7 +275,8 @@ func writeServiceError(ctx context.Context, w http.ResponseWriter, svcErr *tidco
 			ErrorAttributeConflict.Code,
 			ErrorAgentAlreadyExistsWithClientID.Code:
 			statusCode = http.StatusConflict
-		case ErrorCannotModifyDeclarativeResource.Code:
+		case ErrorCannotModifyDeclarativeResource.Code,
+			tidcommon.ErrorUnauthorized.Code:
 			statusCode = http.StatusForbidden
 		default:
 			statusCode = http.StatusBadRequest

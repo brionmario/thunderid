@@ -734,6 +734,7 @@ type InboundClient struct {
 	Assertion                 *AssertionConfig
 	LoginConsent              *LoginConsentConfig
 	AllowedUserTypes          []string
+	AllowedAgentTypes         []string
 	SubjectAttribute          map[string]string
 	PasskeyAllowedOrigins     []string
 	// Attestation holds the optional platform attestation config that lets a mobile client prove
@@ -821,7 +822,168 @@ type AccountLinking struct {
 type AttributeConfiguration struct {
 	UserTypeResolution        *UserTypeResolution        `json:"userTypeResolution,omitempty"        yaml:"user_type_resolution,omitempty"`         //nolint:lll
 	UserTypeAttributeMappings []UserTypeAttributeMapping `json:"userTypeAttributeMappings,omitempty" yaml:"user_type_attribute_mappings,omitempty"` //nolint:lll
-	AccountLinking            *AccountLinking            `json:"accountLinking,omitempty"            yaml:"accountLinking,omitempty"`               //nolint:lll
+	AccountLinking            *AccountLinking            `json:"accountLinking,omitempty"           yaml:"accountLinking,omitempty"`                //nolint:lll
+	AuthorizationMapping      *AuthorizationMapping      `json:"authorizationMapping,omitempty"      yaml:"authorizationMapping,omitempty"`         //nolint:lll
+}
+
+// AuthorizationMapping holds a connection's authorization mapping configuration: explicit
+// value-to-target rules, direct name-based lookups, or both together, in which case their resolved
+// targets union.
+type AuthorizationMapping struct {
+	Rules  []AuthorizationRuleMapping   `json:"rules,omitempty"  yaml:"rules,omitempty"`
+	Direct []AuthorizationDirectMapping `json:"direct,omitempty" yaml:"direct,omitempty"`
+}
+
+// AuthorizationTargetType names what a mapped external attribute value resolves to.
+type AuthorizationTargetType string
+
+// Supported authorization target types.
+const (
+	AuthorizationTargetRole       AuthorizationTargetType = "role"
+	AuthorizationTargetGroup      AuthorizationTargetType = "group"
+	AuthorizationTargetPermission AuthorizationTargetType = "permission"
+)
+
+// AuthorizationTarget names a single local role, group, or permission a mapped attribute value
+// confers. For Role and Group, ID identifies the target directly. For Permission, ResourceServerID
+// and Permission together identify it, since a permission only means something on a resource server.
+type AuthorizationTarget struct {
+	Type             AuthorizationTargetType `json:"type"                       yaml:"type"`
+	ID               string                  `json:"id,omitempty"               yaml:"id,omitempty"`
+	ResourceServerID string                  `json:"resourceServerId,omitempty" yaml:"resourceServerId,omitempty"`
+	Permission       string                  `json:"permission,omitempty"       yaml:"permission,omitempty"`
+}
+
+// AuthorizationOperator names how a rule's Value is compared against a claim's resolved value(s).
+type AuthorizationOperator string
+
+// Supported authorization operators. Equals/not_equals and the ordering operators are scalar
+// comparisons; includes/not_includes test set membership and require a multi-valued claim (see
+// AuthorizationRuleMapping.IsMultiValued).
+const (
+	AuthorizationOperatorEquals             AuthorizationOperator = "equals"
+	AuthorizationOperatorNotEquals          AuthorizationOperator = "not_equals"
+	AuthorizationOperatorGreaterThan        AuthorizationOperator = "greater_than"
+	AuthorizationOperatorLessThan           AuthorizationOperator = "less_than"
+	AuthorizationOperatorGreaterThanOrEqual AuthorizationOperator = "greater_than_or_equal"
+	AuthorizationOperatorLessThanOrEqual    AuthorizationOperator = "less_than_or_equal"
+	AuthorizationOperatorIncludes           AuthorizationOperator = "includes"
+	AuthorizationOperatorNotIncludes        AuthorizationOperator = "not_includes"
+)
+
+// supportedAuthorizationOperators lists all the supported authorization operators.
+var supportedAuthorizationOperators = []AuthorizationOperator{
+	AuthorizationOperatorEquals,
+	AuthorizationOperatorNotEquals,
+	AuthorizationOperatorGreaterThan,
+	AuthorizationOperatorLessThan,
+	AuthorizationOperatorGreaterThanOrEqual,
+	AuthorizationOperatorLessThanOrEqual,
+	AuthorizationOperatorIncludes,
+	AuthorizationOperatorNotIncludes,
+}
+
+// IsValid reports whether the operator is one of the supported values.
+func (o AuthorizationOperator) IsValid() bool {
+	for _, supported := range supportedAuthorizationOperators {
+		if o == supported {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOrdering reports whether the operator compares magnitude rather than equality, which is only
+// meaningful for AuthorizationValueTypeNumber.
+func (o AuthorizationOperator) IsOrdering() bool {
+	switch o {
+	case AuthorizationOperatorGreaterThan, AuthorizationOperatorLessThan,
+		AuthorizationOperatorGreaterThanOrEqual, AuthorizationOperatorLessThanOrEqual:
+		return true
+	}
+	return false
+}
+
+// IsMembership reports whether the operator tests set membership across every value a claim carries,
+// which is only meaningful for a multi-valued claim (see AuthorizationRuleMapping.IsMultiValued).
+func (o AuthorizationOperator) IsMembership() bool {
+	return o == AuthorizationOperatorIncludes || o == AuthorizationOperatorNotIncludes
+}
+
+// AuthorizationValueType names how a claim's value(s) are interpreted: as a scalar to compare
+// (string, number, boolean) or as a set to test membership in (array).
+type AuthorizationValueType string
+
+// Supported authorization value types.
+const (
+	AuthorizationValueTypeString  AuthorizationValueType = "string"
+	AuthorizationValueTypeNumber  AuthorizationValueType = "number"
+	AuthorizationValueTypeBoolean AuthorizationValueType = "boolean"
+	AuthorizationValueTypeArray   AuthorizationValueType = "array"
+)
+
+// supportedAuthorizationValueTypes lists all the supported authorization value types.
+var supportedAuthorizationValueTypes = []AuthorizationValueType{
+	AuthorizationValueTypeString,
+	AuthorizationValueTypeNumber,
+	AuthorizationValueTypeBoolean,
+	AuthorizationValueTypeArray,
+}
+
+// IsValid reports whether the value type is one of the supported values.
+func (t AuthorizationValueType) IsValid() bool {
+	for _, supported := range supportedAuthorizationValueTypes {
+		if t == supported {
+			return true
+		}
+	}
+	return false
+}
+
+// AuthorizationRule matches a claim token against Value using Operator, interpreted per the owning
+// mapping's value type, and grants Targets when it matches.
+type AuthorizationRule struct {
+	Operator AuthorizationOperator `json:"operator"      yaml:"operator"`
+	Value    string                `json:"value"         yaml:"value"`
+	Targets  []AuthorizationTarget `json:"targets"       yaml:"targets"`
+}
+
+// AuthorizationRuleMapping maps values of a single external claim to local roles, groups, or permissions.
+// The result is the union of every matching rule's Targets; an unmapped value confers nothing.
+type AuthorizationRuleMapping struct {
+	Claim     string                 `json:"claim"                yaml:"claim"`
+	ValueType AuthorizationValueType `json:"valueType,omitempty"  yaml:"valueType,omitempty"`
+	Delimiter string                 `json:"delimiter,omitempty"  yaml:"delimiter,omitempty"`
+	Values    []AuthorizationRule    `json:"values"               yaml:"values"`
+}
+
+// AuthorizationDirectMapping feeds every value of a single external claim directly onto local
+// roles, groups, or permissions of TargetType, using each value as the name (or permission string) to
+// look up, rather than an explicit per-value rule table. A value with no unambiguous match confers
+// nothing. ResourceServerID is required when TargetType is permission, since a permission only means
+// something on a resource server; it is otherwise unused.
+type AuthorizationDirectMapping struct {
+	Claim            string                  `json:"claim"                      yaml:"claim"`
+	Delimiter        string                  `json:"delimiter,omitempty"        yaml:"delimiter,omitempty"`
+	TargetType       AuthorizationTargetType `json:"targetType"                 yaml:"targetType"`
+	ResourceServerID string                  `json:"resourceServerId,omitempty" yaml:"resourceServerId,omitempty"`
+}
+
+// EffectiveValueType returns ValueType, defaulting to AuthorizationValueTypeString when unset, so
+// callers never need to special-case the zero value.
+func (m AuthorizationRuleMapping) EffectiveValueType() AuthorizationValueType {
+	if m.ValueType == "" {
+		return AuthorizationValueTypeString
+	}
+	return m.ValueType
+}
+
+// IsMultiValued reports whether the mapping declares a set-membership claim (an array, or a
+// delimited string) rather than a single value to compare.
+func (m AuthorizationRuleMapping) IsMultiValued() bool {
+	valueType := m.EffectiveValueType()
+	return valueType == AuthorizationValueTypeArray ||
+		(valueType == AuthorizationValueTypeString && m.Delimiter != "")
 }
 
 // ConsentElementApproval represents a user's approval decision for a specific element.
@@ -1044,6 +1206,24 @@ type Application struct {
 	InboundAuthProfile `yaml:",inline"`
 	InboundAuthConfig  []InboundAuthConfigWithSecret `yaml:"inboundAuthConfig,omitempty" json:"inboundAuthConfig,omitempty" jsonschema:"Inbound authentication configuration (OAuth2/OIDC settings)."`
 	Metadata           map[string]interface{}        `yaml:"metadata,omitempty" json:"metadata,omitempty" jsonschema:"Generic metadata key-value pairs."`
+
+	// EntityCategory is the category of the entity backing this runtime application view (app or
+	// agent). Runtime-only: never serialized on the application API or in declarative resources.
+	EntityCategory EntityCategory `yaml:"-" json:"-"`
+}
+
+// OAuthClientID returns the client_id of the application's OAuth inbound auth config, or an empty
+// string when it has no OAuth config.
+func (a *Application) OAuthClientID() string {
+	if a == nil {
+		return ""
+	}
+	for _, inbound := range a.InboundAuthConfig {
+		if inbound.Type == OAuthInboundAuthType && inbound.OAuthConfig != nil {
+			return inbound.OAuthConfig.ClientID
+		}
+	}
+	return ""
 }
 
 // InboundAuthProfile is the wire field block embedded in entity DTOs (requests and responses).
@@ -1062,7 +1242,8 @@ type InboundAuthProfile struct {
 	LayoutID                  string              `json:"layoutId,omitempty"               yaml:"layoutId,omitempty"               jsonschema:"Layout configuration ID. Optional. Customizes the screen structure and component positioning of login pages."`
 	Assertion                 *AssertionConfig    `json:"assertion,omitempty"              yaml:"assertion,omitempty"              jsonschema:"Assertion configuration. Optional. Customize assertion validity periods and included user attributes."`
 	LoginConsent              *LoginConsentConfig `json:"loginConsent,omitempty"           yaml:"loginConsent,omitempty"           jsonschema:"Login consent configuration settings."`
-	AllowedUserTypes          []string            `json:"allowedUserTypes,omitempty"           yaml:"allowedUserTypes,omitempty"           jsonschema:"Allowed user types. Optional. Restricts which user types can register or sign up through this resource."`
+	AllowedUserTypes          []string            `json:"allowedUserTypes,omitempty"           yaml:"allowedUserTypes,omitempty"           jsonschema:"Allowed user types. Optional. Restricts which user types can authenticate to, register, or sign up through this resource."`
+	AllowedAgentTypes         []string            `json:"allowedAgentTypes,omitempty"          yaml:"allowedAgentTypes,omitempty"          jsonschema:"Allowed agent types. Optional. Agents may authenticate to this resource only when their agent type is listed here; when the list is empty no agent can authenticate."`
 	SubjectAttribute          map[string]string   `json:"subjectAttribute,omitempty"           yaml:"subjectAttribute,omitempty"           jsonschema:"Per-user-type mapping of the schema attribute to use as the token subject (sub) claim, keyed by user type name. The attribute must be unique, required, and string-typed in that user type's schema. When no entry applies, the user's ID is used as the subject."`
 	PasskeyAllowedOrigins     []string            `json:"passkeyAllowedOrigins,omitempty"      yaml:"passkeyAllowedOrigins,omitempty"      jsonschema:"Allowed origins for WebAuthn/passkey operations for this application. Optional. When set, overrides the server-level passkey allowed origins for flow-based passkey operations."`
 	Attestation               *AttestationConfig  `json:"attestation,omitempty"                yaml:"attestation,omitempty"                jsonschema:"Platform attestation configuration. Optional. Enables a mobile client to initiate flows directly by proving its binary identity (e.g. Google Play Integrity), regardless of protocol. The service account credentials are write-only and never returned in responses."`
@@ -1215,9 +1396,15 @@ func getDuration(startTime int64, endTime int64) int64 {
 
 // Subject identifies the principal for an access evaluation.
 type Subject struct {
-	Type       string                 `json:"type,omitempty"`
-	ID         string                 `json:"id"`
-	GroupIDs   []string               `json:"groupIds,omitempty"`
+	Type string `json:"type,omitempty"`
+	// ID is optional: a federated identity with no local record is described by GroupIDs and
+	// RoleIDs alone.
+	ID       string   `json:"id"`
+	GroupIDs []string `json:"groupIds,omitempty"`
+	// RoleIDs names roles the subject holds without a stored assignment, such as those derived
+	// from an external attribute mapping. It is resolved server-side, like GroupIDs, and must never
+	// be populated from request input.
+	RoleIDs    []string               `json:"roleIds,omitempty"`
 	Properties map[string]interface{} `json:"properties,omitempty"`
 }
 
@@ -1387,7 +1574,10 @@ type CryptoDetails struct {
 
 // PublicKeyInfo describes a public key returned by GetPublicKeys.
 type PublicKeyInfo struct {
-	KeyID               string
+	KeyID string // Unique identifier for the key within the system.
+	Kid   string // Key ID used in JWKS and JWT headers; may be the same as KeyID or thumbprint
+	// Algorithm is the JWA algorithm name for this key (e.g. "RS256", "ES256", "EdDSA", "ML-DSA-65").
+	// Providers must always populate it: it is published verbatim as the JWK "alg" with no fallback.
 	Algorithm           string
 	PublicKey           gocrypto.PublicKey
 	Thumbprint          string

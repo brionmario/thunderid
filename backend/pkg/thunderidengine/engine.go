@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thunder-id/thunderid/internal/agentmgtprovider"
 	"github.com/thunder-id/thunderid/internal/attributecache"
 	"github.com/thunder-id/thunderid/internal/authn/assert"
 	authnprovidermgr "github.com/thunder-id/thunderid/internal/authnprovider/manager"
@@ -150,6 +151,9 @@ func New(mux *http.ServeMux, opts ...Option) *Engine {
 	if engineCtx.userMgtProvider == nil {
 		engineCtx.userMgtProvider = usermgtprovider.NewDisabledUserMgtProvider()
 	}
+	if engineCtx.agentMgtProvider == nil {
+		engineCtx.agentMgtProvider = agentmgtprovider.NewDisabledAgentMgtProvider()
+	}
 	execDeps := executor.ExecutorDependencies{
 		FlowFactory:       engineCtx.flowFactory,
 		AttributeCacheSvc: engineCtx.attributeCacheService,
@@ -160,6 +164,7 @@ func New(mux *http.ServeMux, opts ...Option) *Engine {
 		AuthAssertGen:     engineCtx.authAssertGen,
 		ResourceService:   engineCtx.resourceProvider,
 		UserMgtProvider:   engineCtx.userMgtProvider,
+		AgentMgtProvider:  engineCtx.agentMgtProvider,
 	}
 	interceptorDeps := interceptor.InterceptorDependencies{
 		FlowFactory:    engineCtx.flowFactory,
@@ -226,7 +231,10 @@ func New(mux *http.ServeMux, opts ...Option) *Engine {
 		engineCtx.jweService, engineCtx.flowExecService, engineCtx.observabilitySvc, engineCtx.runtimeCryptoSvc,
 		engineCtx.ouProvider, engineCtx.attributeCacheService, engineCtx.authzProvider, engineCtx.resourceProvider,
 		engineCtx.i18nProvider, engineCtx.idpProvider, engineCtx.dpopVerifier, engineCtx.runtimeStoreProvider,
-		engineCtx.transactioner, revocationEnforcer, revocationService, oauthConfig)
+		engineCtx.transactioner, revocationEnforcer, revocationService,
+		// The embedded engine has no SSO session store, so prompt=none keeps answering
+		// login_required rather than consulting a session.
+		nil, engineCtx.flowProvider, oauthConfig)
 	if err != nil {
 		logger.Fatal(ctx, "Failed to initialize OAuth services", log.Error(err))
 	}
@@ -376,6 +384,7 @@ type engineContext struct {
 
 	actorProvider             providers.ActorProvider
 	userMgtProvider           providers.UserMgtProvider
+	agentMgtProvider          providers.AgentMgtProvider
 	defaultAuthnProvider      providers.AuthnProviderInterface
 	customAuthnProviders      map[string]providers.CustomAuthnProvider
 	resourceProvider          providers.ResourceServerProvider
@@ -478,6 +487,13 @@ func WithActorProvider(provider providers.ActorProvider) Option {
 // rather than the engine refusing to start.
 func WithUserMgtProvider(provider providers.UserMgtProvider) Option {
 	return func(c *engineContext) { c.userMgtProvider = provider }
+}
+
+// WithAgentMgtProvider supplies the agent management provider. Omitting it leaves agent provisioning
+// disabled: runtime capabilities that provision agents then fail with ErrorAgentProvisioningDisabled
+// rather than the engine refusing to start.
+func WithAgentMgtProvider(provider providers.AgentMgtProvider) Option {
+	return func(c *engineContext) { c.agentMgtProvider = provider }
 }
 
 // WithDefaultAuthnProvider supplies the default authentication provider.

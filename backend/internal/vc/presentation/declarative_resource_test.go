@@ -17,7 +17,10 @@ import (
 	"github.com/thunder-id/thunderid/internal/system/config"
 	declarativeresource "github.com/thunder-id/thunderid/internal/system/declarative_resource"
 	"github.com/thunder-id/thunderid/internal/system/log"
+	"github.com/thunder-id/thunderid/internal/system/security"
 	tidcommon "github.com/thunder-id/thunderid/pkg/thunderidengine/common"
+	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
+	"github.com/thunder-id/thunderid/tests/mocks/oumock"
 )
 
 type DefinitionExporterTestSuite struct {
@@ -318,7 +321,7 @@ func (s *DefinitionExporterTestSuite) TestValidateResolvesOUHandle() {
 		map[string]string{"root/eng": "ou-123"}, map[string]string{"ou-123": "root/eng"})
 
 	dto := &PresentationDefinitionDTO{ID: "def-1", Handle: "h", VCT: "v", OUHandle: "root/eng"}
-	s.Require().NoError(validateDefinitionWrapper(dto, nil, nil, ouSvc))
+	s.Require().NoError(validateDefinitionWrapper(dto, nil, nil, newPresentationDefinitionService(nil, ouSvc)))
 	s.Equal("ou-123", dto.OUID)
 }
 
@@ -328,9 +331,39 @@ func (s *DefinitionExporterTestSuite) TestValidateRejectsUnknownOUHandle() {
 	ouSvc := newOUServiceMock(s.T(), map[string]bool{}, map[string]string{}, map[string]string{})
 
 	dto := &PresentationDefinitionDTO{ID: "def-1", Handle: "h", VCT: "v", OUHandle: "no/such/ou"}
-	err := validateDefinitionWrapper(dto, nil, nil, ouSvc)
+	err := validateDefinitionWrapper(dto, nil, nil, newPresentationDefinitionService(nil, ouSvc))
 	s.Require().Error(err)
 	s.Contains(err.Error(), "no/such/ou")
+}
+
+// TestValidateResolvesOUHandleUsesRuntimeContext verifies the ouHandle lookup carries a runtime
+// context. Declarative resources load at server boot with no authenticated caller, and
+// GetOrganizationUnitByPath's authorization check denies unauthenticated, non-runtime callers;
+// a plain context here would make every ouHandle-based resource fail to load with a misleading
+// "organization unit ... not found" error even though the OU exists. Regression test for that.
+func (s *DefinitionExporterTestSuite) TestValidateResolvesOUHandleUsesRuntimeContext() {
+	ouSvc := oumock.NewOrganizationUnitServiceInterfaceMock(s.T())
+	ouSvc.EXPECT().
+		GetOrganizationUnitByPath(mock.MatchedBy(security.IsRuntimeContext), "root/eng").
+		Return(providers.OrganizationUnit{ID: "ou-123"}, nil).Once()
+	ouSvc.EXPECT().IsOrganizationUnitExists(mock.Anything, "ou-123").Return(true, nil).Once()
+
+	dto := &PresentationDefinitionDTO{ID: "def-1", Handle: "h", VCT: "v", OUHandle: "root/eng"}
+	s.Require().NoError(validateDefinitionWrapper(dto, nil, nil, newPresentationDefinitionService(nil, ouSvc)))
+	s.Equal("ou-123", dto.OUID)
+}
+
+// TestValidateOUIDWinsOverOUHandle verifies explicit declarative ownership does
+// not depend on, or attempt to resolve, a supplemental OU handle.
+func (s *DefinitionExporterTestSuite) TestValidateOUIDWinsOverOUHandle() {
+	ouSvc := oumock.NewOrganizationUnitServiceInterfaceMock(s.T())
+	ouSvc.EXPECT().IsOrganizationUnitExists(mock.Anything, "ou-123").Return(true, nil).Once()
+
+	dto := &PresentationDefinitionDTO{
+		ID: "def-1", Handle: "h", VCT: "v", OUID: "ou-123", OUHandle: "wrong/path",
+	}
+	s.Require().NoError(validateDefinitionWrapper(dto, nil, nil, newPresentationDefinitionService(nil, ouSvc)))
+	s.Equal("ou-123", dto.OUID)
 }
 
 // TestValidateRejectsMissingOU verifies a declarative definition without an organization
@@ -348,7 +381,7 @@ func (s *DefinitionExporterTestSuite) TestValidateRejectsUnknownExplicitOUID() {
 	ouSvc := newOUServiceMock(s.T(), map[string]bool{}, map[string]string{}, map[string]string{})
 
 	dto := &PresentationDefinitionDTO{ID: "def-1", Handle: "h", VCT: "v", OUID: "no-such-ou"}
-	err := validateDefinitionWrapper(dto, nil, nil, ouSvc)
+	err := validateDefinitionWrapper(dto, nil, nil, newPresentationDefinitionService(nil, ouSvc))
 	s.Require().Error(err)
 	s.Contains(err.Error(), "no-such-ou")
 }
@@ -480,7 +513,7 @@ func (s *DefinitionExporterTestSuite) TestLoadDeclarativeResourcesFromDisk() {
 
 	fileStore := newDefinitionFileBasedStore()
 	s.Require().NoError(fileStore.GenericFileBasedStore.ClearByType())
-	s.Require().NoError(loadDeclarativeResources(fileStore, nil, ouSvc))
+	s.Require().NoError(loadDeclarativeResources(fileStore, nil, newPresentationDefinitionService(nil, ouSvc)))
 
 	got, err := fileStore.GetPresentationDefinitionByID(context.Background(), "def-disk")
 	s.Require().NoError(err)

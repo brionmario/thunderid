@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/thunder-id/thunderid/internal/actorprovider"
 	"github.com/thunder-id/thunderid/internal/agent"
 	"github.com/thunder-id/thunderid/internal/agentmgtprovider"
@@ -62,6 +64,7 @@ import (
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/dpop"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/jti"
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/revocation"
+	"github.com/thunder-id/thunderid/internal/oauth/oauth2/tokenservice"
 	"github.com/thunder-id/thunderid/internal/openid4vci"
 	"github.com/thunder-id/thunderid/internal/ou"
 	"github.com/thunder-id/thunderid/internal/resource"
@@ -87,6 +90,7 @@ import (
 	"github.com/thunder-id/thunderid/internal/system/kmprovider"
 	"github.com/thunder-id/thunderid/internal/system/kmprovider/defaultkm/pki"
 	"github.com/thunder-id/thunderid/internal/system/log"
+
 	"github.com/thunder-id/thunderid/internal/system/mcp"
 	"github.com/thunder-id/thunderid/internal/system/observability"
 	"github.com/thunder-id/thunderid/internal/system/resourcedependency"
@@ -110,7 +114,7 @@ var observabilitySvc observability.ObservabilityServiceInterface
 // to the number of services. Eventhough it has many branching statements, almost all are early exits so cognitive
 // complexity is low.
 func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterface) (
-	jwt.JWTServiceInterface, kmprovider.RuntimeCryptoProvider, importer.ImportServiceInterface) {
+	jwt.JWTServiceInterface, kmprovider.RuntimeCryptoProvider, importer.ImportServiceInterface, *mcpsdk.Server) {
 	logger := log.GetLogger()
 
 	// Service registration runs during application startup, outside any request.
@@ -141,7 +145,9 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 	observabilitySvc = observability.Initialize(config.GetServerRuntime().Config.Observability)
 
 	// Initialize MCP server early so packages initializing below can register tools.
-	mcpServer := mcp.Initialize(mux, jwtService)
+	// Route mounting (mcp.Initialize) happens later in main(), once the token-revocation enforcer
+	// exists — mcp.DefaultGuard needs it to reject revoked tokens the same way the REST gate does.
+	mcpServer := mcp.NewServer()
 
 	// List to collect exporters from each package
 	var exporters []declarativeresource.ResourceExporter
@@ -221,7 +227,7 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 
 	authZService := authz.Initialize(roleService)
 
-	idpService, err := idp.Initialize(cacheManager, entityTypeService)
+	idpService, err := idp.Initialize(cacheManager, entityTypeService, roleService, groupService, resourceService)
 	fatalOnError(ctx, logger, err, "Failed to initialize IDPService")
 
 	templateService, err := template.Initialize()
@@ -292,6 +298,7 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 	// Initialize authentication services.
 	authAssertGen := authnAssert.Initialize()
 	consentEnforcer := authnConsent.Initialize(jwtService)
+	agentMgtProvider := agentmgtprovider.Initialize()
 
 	_, directAuthGuard := authn.Initialize(mux, mcpServer, idpService, jwtService, authnProvider, authAssertGen,
 		otpCoreService, notifSenderSvc, templateService, magicLinkService, oauthAuthnService,
@@ -362,6 +369,7 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 			RoleAssignmentService: roleAssignmentService,
 			EntityProvider:        entityProvider,
 			UserMgtProvider:       userMgtProvider,
+			AgentMgtProvider:      agentMgtProvider,
 			AttributeCacheSvc:     attributeCacheService,
 			EmailClient:           emailClient,
 			TemplateService:       templateService,
@@ -412,21 +420,25 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 
 	applicationService, applicationExporter, err := application.Initialize(
 		mux, mcpServer, entityService, inboundClientService, ouService, i18nService,
-		runtimeCryptoSvc, serverConfigService)
+		runtimeCryptoSvc, serverConfigService,
+		func(client *providers.OAuthClient) time.Duration {
+			return tokenservice.ArtifactLifetime(oauthCfg, client)
+		})
 	fatalOnError(ctx, logger, err, "Failed to initialize ApplicationService")
+	// Two-phase initialization: inject the application service into the executors that act on it.
+	fatalOnError(ctx, logger, executor.SetApplicationProvider(execRegistry, applicationService),
+		"Failed to inject the application provider into the flow executors")
 	exporters = append(exporters, applicationExporter)
 
 	agentService, agentExporter, err := agent.Initialize(mux, entityService, inboundClientService, ouService,
-		roleService)
+		roleService, ouAuthzService)
 	fatalOnError(ctx, logger, err, "Failed to initialize AgentService")
 	exporters = append(exporters, agentExporter)
 
-	// Initialize agent management provider. It has no runtime consumer yet: the provisioning
-	// executor gains its agent branch in a follow-up change, at which point this is handed to the
-	// executor registry. It is constructed here so the package is linked into the server binary and
-	// its integration coverage is reported as uncovered rather than silently dropped.
-	// TODO: pass to the provisioning executor once agent provisioning lands.
-	_ = agentmgtprovider.Initialize(agentService)
+	// Two-phase initialization: the provider is constructed before the executor registry, which
+	// needs it, while the agent service it delegates to only exists after the inbound client and
+	// flow management services.
+	agentMgtProvider.SetAgentService(agentService)
 
 	// Wire the dependency registry into the consuming services (two-phase init to avoid cyclic
 	// imports). flowMgtService is both a consumer and a provider: it reports which flows reference an
@@ -490,7 +502,8 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 	tokenValidator, err := oauth.Initialize(mux, actorProvider, authnProvider, jwtService, jweService,
 		flowExecService, observabilitySvc, runtimeCryptoSvc, ouService, attributeCacheService, authZService,
 		resourceServerProvider, i18nService, idpService, dpopVerifier,
-		runtimeStoreProvider, transactioner, revocationEnforcer, revocationSvc, oauthCfg)
+		runtimeStoreProvider, transactioner, revocationEnforcer, revocationSvc,
+		sessionService, flowMgtService, oauthCfg)
 	fatalOnError(ctx, logger, err, "Failed to initialize OAuth services")
 
 	// Initialized after the OAuth services because credential issuance validates the presented
@@ -509,7 +522,7 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 	healthSvc := healthcheckservice.Initialize(dbprovider.GetDBProvider(), dbprovider.GetRedisProvider())
 	services.NewHealthCheckService(mux, healthSvc)
 
-	return jwtService, runtimeCryptoSvc, importService
+	return jwtService, runtimeCryptoSvc, importService, mcpServer
 }
 
 // initAttestationProvider initializes the platform attestation provider, terminating server startup
