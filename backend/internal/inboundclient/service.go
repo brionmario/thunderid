@@ -948,7 +948,8 @@ func validateOAuthProfile(ctx context.Context, p *providers.OAuthProfile, hasCli
 
 // validateBackchannelLogoutURI checks the back-channel logout URI: an absolute http or https URL
 // with a host, no userinfo, fragment or wildcard, https for a public client, and no private host when
-// configuration rejects them.
+// configuration rejects them. The server's own origin is allowed whatever its address and scheme,
+// because deliveries to it never leave the process.
 func validateBackchannelLogoutURI(p *providers.OAuthProfile) error {
 	uri := p.BackchannelLogoutURI
 	if uri == "" {
@@ -961,6 +962,9 @@ func validateBackchannelLogoutURI(p *providers.OAuthProfile) error {
 	parsed, err := sysutils.ParseURL(uri)
 	if err != nil || parsed.Hostname() == "" || parsed.User != nil {
 		return ErrOAuthInvalidBackchannelLogoutURI
+	}
+	if syshttp.IsServerOrigin(uri) {
+		return nil
 	}
 	if config.GetServerRuntime().Config.OAuth.Logout.Backchannel.RejectsPrivateAddresses() &&
 		syshttp.IsPrivateHost(parsed.Hostname()) {
