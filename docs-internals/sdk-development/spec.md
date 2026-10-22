@@ -286,7 +286,7 @@ What the client holds in place of a token differs by platform, and nothing else 
 |---|---|---|
 | Backend location | The application's own origin | Any origin, pinned in configuration |
 | Session held as | An `HttpOnly` cookie the page cannot read | An opaque handle in the platform's secure store, attached to each call |
-| Sign-in | A redirect to the backend's sign-in endpoint | The backend's sign-in endpoint in `ASWebAuthenticationSession` or a Custom Tab, returning to the application's redirect scheme |
+| Sign-in | A redirect to the backend's sign-in endpoint | The backend's sign-in endpoint in `ASWebAuthenticationSession` or a Custom Tab, returning a one-time code to the application's redirect scheme |
 | Cross-site defence | Same-origin calls and a header a cross-origin page cannot set | Not applicable: the backend's base URL is pinned, and the handle is held by the application |
 
 Everything else is identical, including the endpoints and how a `401` from each is read, so one
@@ -410,6 +410,29 @@ retry, and a second failure means signed out; `login_required` means signed out 
 Any other `401` is the API's own answer and MUST be returned to the caller untouched. A backend
 that refreshes on the server never answers `session_expired`, so one client works against both
 kinds.
+
+**Starting a session on mobile.** A browser carries the backend's cookie by itself. A mobile
+application cannot: the browser session it opens for sign-in has its own cookie jar, which the
+application is not allowed to read, and that separation is the platform's whole protection. The
+session is therefore handed over once, in the open, and the handoff MUST be bound to the
+application that started it:
+
+1. The SDK generates a PKCE verifier and opens `signIn` in `ASWebAuthenticationSession` or a
+   Custom Tab with `redirect_uri` (the application's registered scheme), `code_challenge` and
+   `code_challenge_method=S256`. `returnTo` is the browser SDKs' form of the same parameter.
+2. The backend runs the flow, keeps the tokens, and returns to `redirect_uri` with a one-time
+   `session_code`, or with `error`.
+3. The SDK posts the code and the verifier to `session` and receives
+   `{handle, isSignedIn, user, expiresAt}`.
+
+The handle MUST go in the platform's secure store and MUST be attached to every later backend
+call in the `X-Session-Handle` header. A backend MUST accept a `session_code` once, MUST bind it
+to the `code_challenge` it was issued against, and MUST expire it in minutes, for the same
+reason an authorization code is held to those rules: anything handed over through a redirect
+scheme can be observed by another application on the device.
+
+Everything after the handoff is the same on both platforms: the five remaining endpoints, the
+`401` reading above, and the surface in [Client surface](#client-surface).
 
 ### Client surface
 
@@ -1244,6 +1267,9 @@ read a token, and ending the session on the server ends it for the application.
 - **AC10.11:** Given a mobile SDK, when the session is inspected after sign-in, then the handle
   is in the platform's secure store, the backend base URL is pinned and uses HTTPS, and neither
   the handle nor the backend's responses appear in logs or crash reports.
+- **AC10.12:** Given a mobile SDK, when the browser session returns a `session_code`, then it is
+  exchanged with the verifier the SDK generated for that sign-in, and a callback carrying no code,
+  or a code for a sign-in this client did not start, is refused.
 
 ## Change log
 
