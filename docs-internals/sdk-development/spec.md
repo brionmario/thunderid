@@ -272,12 +272,25 @@ at the flow endpoint rather than at initialization.
 The mode MUST NOT change the public surface. `signIn()` is `signIn()` in both modes; the SDK
 resolves the underlying flow internally.
 
-**Sign-in on a backend.** Browser SDKs MAY additionally support running the whole flow on a
-backend the application owns, on the application's own origin: the Backend for Frontend pattern
-of [RFC 10017](https://www.rfc-editor.org/rfc/rfc10017.html). The backend runs redirect mode,
-keeps the tokens, and proxies the application's API calls, so the browser holds nothing but an
-`HttpOnly` cookie it cannot read. It is the answer to the one weakness a browser cannot
-engineer away: a token the page can reach is a token any script on the page can take.
+**Sign-in on a backend.** An SDK MAY additionally support running the whole flow on a backend
+the application owns: the Backend for Frontend pattern of
+[RFC 10017](https://www.rfc-editor.org/rfc/rfc10017.html). The backend runs redirect mode, keeps
+the tokens, and proxies the application's API calls, so the client holds no token at all. For a
+browser application it is the answer to the one weakness a browser cannot engineer away, that a
+token the page can reach is a token any script on the page can take. For a mobile application
+that already has a backend, it keeps the refresh token and the API credentials off the handset.
+
+What the client holds in place of a token differs by platform, and nothing else does:
+
+| | Browser SDKs | Mobile SDKs |
+|---|---|---|
+| Backend location | The application's own origin | Any origin, pinned in configuration |
+| Session held as | An `HttpOnly` cookie the page cannot read | An opaque handle in the platform's secure store, attached to each call |
+| Sign-in | A redirect to the backend's sign-in endpoint | The backend's sign-in endpoint in `ASWebAuthenticationSession` or a Custom Tab, returning to the application's redirect scheme |
+| Cross-site defence | Same-origin calls and a header a cross-origin page cannot set | Not applicable: the backend's base URL is pinned, and the handle is held by the application |
+
+Everything else is identical, including the endpoints and how a `401` from each is read, so one
+backend serves an application's web and mobile clients alike.
 
 The backend is a contract, not a package. An SDK MUST NOT assume a particular implementation,
 and MUST work against any backend that answers the endpoints in
@@ -357,7 +370,7 @@ this table already covers.
 | `tokenValidation` | Object | No | Validation on | Clock tolerance, and per-claim switches that MUST be rejected when they would disable a check required by [Security requirements](#security-requirements) against a non-loopback `baseUrl`. Disabling a mandatory check is a test affordance, not a deployment option. |
 | `tokenLifecycle` | Object | No | Platform default | Refresh timing and lifecycle behaviour. |
 | `allowedExternalUrls` | List | No | Empty | Origins the SDK may attach an access token to when tokens are held in isolated storage. Every entry MUST use HTTPS. See [Token attachment](#token-attachment) for how entries are matched. |
-| `session` | Object | No | Disabled | Browser SDKs only. Behaviour around the server's SSO session. `checkInterval` (seconds, default `0`, backend sign-in only) polls the backend's check endpoint for a session that ended elsewhere; `0` leaves only the check that runs when the page regains focus. `silentSignIn.beforeRedirect` (default `false`) makes `signIn` try a silent `prompt=none` sign-in first and continue with the redirect when it fails; it MUST be skipped when the caller sets its own `prompt`. `silentSignIn.timeout` (milliseconds, default `10000`) bounds how long a silent sign-in waits before reporting the user as signed out, including from `signInSilently`. Silent sign-in only finds the session when the browser sends the server's session cookie to the iframe, which needs the application on the same site as the server. |
+| `session` | Object | No | Disabled | Behaviour around the server's SSO session. `checkInterval` (seconds, default `0`, backend sign-in only) polls the backend's check endpoint for a session that ended elsewhere; `0` leaves only the check that runs when the application comes back to the foreground. The rest of the key is browser SDKs only. `silentSignIn.beforeRedirect` (default `false`) makes `signIn` try a silent `prompt=none` sign-in first and continue with the redirect when it fails; it MUST be skipped when the caller sets its own `prompt`. `silentSignIn.timeout` (milliseconds, default `10000`) bounds how long a silent sign-in waits before reporting the user as signed out, including from `signInSilently`. Silent sign-in only finds the session when the browser sends the server's session cookie to the iframe, which needs the application on the same site as the server. |
 | `backchannelLogout` | Object | No | Disabled | Server-side SDKs only. Turns on [back-channel logout handling](#back-channel-logout-handling): `enabled`, the `path` of the handler where the SDK mounts it, and the `store` that records ended sessions. An SDK that cannot receive the request MUST document the key as unsupported. |
 | `organizationHandle` | String | No | None | Organization identifier, required when a custom domain is configured. |
 | `organizationChain` | Object | No | None | Chained authentication across organization contexts. |
@@ -378,9 +391,10 @@ a distinct, documented error rather than a null dereference.
 
 #### Backend endpoints
 
-`endpoints.backend` holds the paths of the backend that signs the application in. Each is a
-path on the application's own origin, and each unset entry defaults under `/api/auth`. App
-developers see "backend", not "BFF".
+`endpoints.backend` holds the paths of the backend that signs the application in. In a browser
+each is a path on the application's own origin; on mobile each is a path under the backend base
+URL the application configures. Each unset entry defaults under `/api/auth`. App developers see
+"backend", not "BFF".
 
 | Key | Default | Contract |
 |---|---|---|
@@ -437,7 +451,7 @@ When sign-in runs on a backend, the surface stays the same but its source change
 loading, not signed in" before it knows sends every route guard into a sign-in the SSO session
 answers at once, in a loop. The operations that hand a token to the caller (`getAccessToken`,
 `getIdToken`, `exchangeToken`, and any token revocation) MUST fail with a single stable
-unsupported-operation error, because the browser holds no token to give. An SDK
+unsupported-operation error, because the client holds no token to give. An SDK
 MUST NOT substitute a plausible-looking empty value for one.
 
 **User and profile**
@@ -688,13 +702,18 @@ Every SDK MUST accept a caller-supplied storage adapter. That adapter is outside
 control and can be weaker than the platform default, so an SDK MUST document that the secure
 default applies only when it is the one in use.
 
-**Sign-in on a backend.** Where an SDK supports it, the browser MUST hold no token at any
-point: no storage write, no in-memory copy, and nothing in the surface that returns one. Every
-request the SDK sends to the backend MUST be same-origin, MUST carry the session cookie, and
-MUST carry a header the backend requires and a cross-origin page cannot set without a preflight
-the backend never answers. A request to a URL outside the configured API base MUST be refused
-rather than sent without credentials: sending it anyway turns an authenticated call into an
-anonymous one and hides the failure from the caller.
+**Sign-in on a backend.** Where an SDK supports it, the client MUST hold no token at any point:
+no storage write, no in-memory copy, and nothing in the surface that returns one. A request to a
+URL outside the configured API base MUST be refused rather than sent without credentials:
+sending it anyway turns an authenticated call into an anonymous one and hides the failure from
+the caller.
+
+In a browser, every request the SDK sends to the backend MUST be same-origin, MUST carry the
+session cookie, and MUST carry a header the backend requires and a cross-origin page cannot set
+without a preflight the backend never answers. On mobile, where the backend is reached
+cross-origin by definition, its base URL MUST be configured and MUST use HTTPS, every request
+MUST go to that base, and the session handle MUST live in the platform's secure store under
+[Token storage](#security-requirements) and MUST NOT be written to a log or a crash report.
 
 <a id="token-attachment"></a>
 
@@ -1189,16 +1208,16 @@ session ended, so a user who signs out elsewhere is not left signed in to my app
   later request presents a matching session, then the request is treated as unauthenticated
   until that session could no longer be valid.
 
-### R10. A browser application can keep its tokens out of the browser
+### R10. An application can keep its tokens off the client
 
-**Requirement:** As a developer of a browser application whose users' sessions are worth
-stealing, I want sign-in to run on my own backend, so that no script that reaches my page can
+**Requirement:** As a developer of an application whose users' sessions are worth stealing, I
+want sign-in to run on my own backend, so that nothing that reaches the page or the handset can
 read a token, and ending the session on the server ends it for the application.
 
 **Acceptance criteria:**
 
 - **AC10.1:** Given `endpoints.backend` is set, when the application signs in, calls an API,
-  reloads, and signs out, then browser storage, the SDK's in-memory state, and every value the
+  restarts, and signs out, then client storage, the SDK's in-memory state, and every value the
   public surface returns contain no access, refresh, or ID token.
 - **AC10.2:** Given `endpoints.backend` is not set, when the application runs, then its
   behaviour is unchanged from an SDK without this capability.
@@ -1219,9 +1238,12 @@ read a token, and ending the session on the server ends it for the application.
   session-ended notification does not fire for it.
 - **AC10.9:** Given a request to a URL outside the configured API base, when the application
   sends it through the SDK, then it is refused with a documented error and no request leaves the
-  browser.
-- **AC10.10:** Given a cross-origin page, when it calls a backend endpoint with the user's
-  cookie, then the request is refused for want of the required header.
+  client.
+- **AC10.10:** Given a browser SDK and a cross-origin page, when it calls a backend endpoint
+  with the user's cookie, then the request is refused for want of the required header.
+- **AC10.11:** Given a mobile SDK, when the session is inspected after sign-in, then the handle
+  is in the platform's secure store, the backend base URL is pinned and uses HTTPS, and neither
+  the handle nor the backend's responses appear in logs or crash reports.
 
 ## Change log
 
@@ -1233,4 +1255,4 @@ read a token, and ending the session on the server ends it for the application.
 | 0.4 | 2026-10-06 | Back-channel logout handling added as an optional capability for SDKs with a server runtime. |
 | 0.5 | 2026-10-15 | `syncSession` replaced by a `session` object. The server does not implement OpenID Connect Session Management, so there is no check-session iframe for an SDK to synchronize with. `session.silentSignIn` configures silent sign-in from the SSO session instead. |
 | 0.6 | 2026-10-20 | Federated redirects in embedded mode: a callback without a `state` is never submitted, mobile SDKs compare it with the request's `state`, and a chained `REDIRECTION` is followed (AC4.13 to AC4.15). Authorization codes, and the callback URLs that carry them, are never logged. |
-| 0.7 | 2026-10-22 | Sign-in on a backend the application owns (RFC 10017) added as an optional capability for browser SDKs: the `endpoints.backend` contract, the surface that is refused while it is on, and `session.checkInterval` (R10). |
+| 0.7 | 2026-10-22 | Sign-in on a backend the application owns (RFC 10017) added as an optional capability for browser and mobile SDKs: the `endpoints.backend` contract, what the client holds in place of a token on each platform, the surface that is refused while it is on, and `session.checkInterval` (R10). |
