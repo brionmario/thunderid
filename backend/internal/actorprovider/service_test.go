@@ -15,10 +15,12 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/thunder-id/thunderid/internal/entityprovider"
+	"github.com/thunder-id/thunderid/internal/entitytype"
 	"github.com/thunder-id/thunderid/internal/inboundclient"
 	inboundmodel "github.com/thunder-id/thunderid/internal/inboundclient/model"
 	"github.com/thunder-id/thunderid/tests/mocks/authnprovider/managermock"
 	"github.com/thunder-id/thunderid/tests/mocks/entityprovidermock"
+	"github.com/thunder-id/thunderid/tests/mocks/entitytypemock"
 	"github.com/thunder-id/thunderid/tests/mocks/inboundclientmock"
 	"github.com/thunder-id/thunderid/tests/mocks/rolemock"
 )
@@ -41,7 +43,7 @@ func (s *ActorProviderTestSuite) SetupTest() {
 	s.mockEntity = entityprovidermock.NewEntityProviderInterfaceMock(s.T())
 	s.mockAuthn = managermock.NewAuthnProviderManagerMock(s.T())
 	s.mockRole = rolemock.NewRoleServiceInterfaceMock(s.T())
-	s.provider = Initialize(s.mockInbound, s.mockEntity, s.mockAuthn, s.mockRole)
+	s.provider = Initialize(s.mockInbound, s.mockEntity, s.mockAuthn, s.mockRole, nil)
 }
 
 func (s *ActorProviderTestSuite) TestGetOAuthClientByClientID_Delegates() {
@@ -56,12 +58,12 @@ func (s *ActorProviderTestSuite) TestGetOAuthClientByClientID_Delegates() {
 
 func (s *ActorProviderTestSuite) TestGetOAuthClientByClientID_NotFound() {
 	s.mockInbound.On("GetOAuthClientByClientID", mock.Anything, "missing").
-		Return((*providers.OAuthClient)(nil), inboundclient.ErrInboundClientNotFound)
+		Return((*providers.OAuthClient)(nil), nil)
 
 	client, svcErr := s.provider.GetOAuthClientByClientID(context.Background(), "missing")
 
 	s.Nil(client)
-	s.Equal(ErrorActorNotFound.Code, svcErr.Code)
+	s.Nil(svcErr)
 }
 
 func (s *ActorProviderTestSuite) TestGetOAuthClientByClientID_FetchFailed() {
@@ -69,6 +71,36 @@ func (s *ActorProviderTestSuite) TestGetOAuthClientByClientID_FetchFailed() {
 		Return((*providers.OAuthClient)(nil), errors.New("db error"))
 
 	client, svcErr := s.provider.GetOAuthClientByClientID(context.Background(), "client-1")
+
+	s.Nil(client)
+	s.Equal(tidcommon.InternalServerError.Code, svcErr.Code)
+}
+
+func (s *ActorProviderTestSuite) TestGetOAuthClientByID_Delegates() {
+	expected := &providers.OAuthClient{ID: "app-1", ClientID: "client-1"}
+	s.mockInbound.On("GetOAuthClientByEntityID", mock.Anything, "app-1").Return(expected, nil)
+
+	client, svcErr := s.provider.GetOAuthClientByID(context.Background(), "app-1")
+
+	s.Nil(svcErr)
+	s.Equal(toProviderOAuthClient(expected), client)
+}
+
+func (s *ActorProviderTestSuite) TestGetOAuthClientByID_NotFound() {
+	s.mockInbound.On("GetOAuthClientByEntityID", mock.Anything, "missing").
+		Return((*providers.OAuthClient)(nil), nil)
+
+	client, svcErr := s.provider.GetOAuthClientByID(context.Background(), "missing")
+
+	s.Nil(client)
+	s.Nil(svcErr)
+}
+
+func (s *ActorProviderTestSuite) TestGetOAuthClientByID_FetchFailed() {
+	s.mockInbound.On("GetOAuthClientByEntityID", mock.Anything, "app-1").
+		Return((*providers.OAuthClient)(nil), errors.New("db error"))
+
+	client, svcErr := s.provider.GetOAuthClientByID(context.Background(), "app-1")
 
 	s.Nil(client)
 	s.Equal(tidcommon.InternalServerError.Code, svcErr.Code)
@@ -143,6 +175,33 @@ func (s *ActorProviderTestSuite) TestGetActor_Delegates() {
 	s.Equal(expected, entity)
 }
 
+func (s *ActorProviderTestSuite) TestGetActor_AgentDisplayComesFromTheDisplayAttribute() {
+	for name, tc := range map[string]struct {
+		displayPath string
+		want        string
+	}{
+		"display attribute set":     {displayPath: "name", want: "Ledger Agent"},
+		"display attribute removed": {displayPath: "", want: "agent-1"},
+	} {
+		s.Run(name, func() {
+			mockType := entitytypemock.NewEntityTypeServiceInterfaceMock(s.T())
+			mockType.On("GetDisplayAttributesByHandles", mock.Anything, entitytype.TypeCategoryAgent,
+				[]string{"default"}).Return(map[string]string{"default": tc.displayPath},
+				(*tidcommon.ServiceError)(nil)).Once()
+			provider := Initialize(s.mockInbound, s.mockEntity, s.mockAuthn, s.mockRole, mockType)
+			s.mockEntity.On("GetEntity", "agent-1").Return(&providers.Entity{
+				ID: "agent-1", Category: providers.EntityCategoryAgent, Type: "default",
+				Attributes: []byte(`{"name":"Ledger Agent"}`),
+			}, (*entityprovider.EntityProviderError)(nil)).Once()
+
+			entity, err := provider.GetActor("agent-1")
+
+			s.Nil(err)
+			s.Equal(tc.want, entity.Display)
+		})
+	}
+}
+
 func (s *ActorProviderTestSuite) TestGetActorGroups_Delegates() {
 	expected := []providers.EntityGroup{{ID: "group-1"}}
 	s.mockEntity.On("GetTransitiveEntityGroups", "app-1").Return(expected, (*entityprovider.EntityProviderError)(nil))
@@ -179,7 +238,7 @@ func (s *ActorProviderTestSuite) TestGetActorRoles_PropagatesError() {
 }
 
 func (s *ActorProviderTestSuite) TestGetActorRoles_NilRoleService_ReturnsNil() {
-	provider := Initialize(s.mockInbound, s.mockEntity, s.mockAuthn, nil)
+	provider := Initialize(s.mockInbound, s.mockEntity, s.mockAuthn, nil, nil)
 
 	roles, err := provider.GetActorRoles("app-1", []string{"group-1"})
 

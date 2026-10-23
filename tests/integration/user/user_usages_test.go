@@ -99,8 +99,9 @@ func (ts *UserUsagesTestSuite) SetupSuite() {
 	ts.ouID = ouID
 
 	userTypeID, err := testutils.CreateUserType(testutils.UserType{
-		Name: usagesUserTypeName,
-		OUID: ts.ouID,
+		Handle:      usagesUserTypeName,
+		DisplayName: "User Usages Person",
+		OUID:        ts.ouID,
 		Schema: map[string]interface{}{
 			"username": map[string]interface{}{"type": "string"},
 			"password": map[string]interface{}{"type": "string", "credential": true},
@@ -111,8 +112,11 @@ func (ts *UserUsagesTestSuite) SetupSuite() {
 
 	// The server allows a single `default` agent type, shared across suites and never deleted.
 	_, err = testutils.CreateAgentType(testutils.UserType{
-		OUID: ts.ouID,
+		Handle:      "default",
+		DisplayName: "Default",
+		OUID:        ts.ouID,
 		Schema: map[string]interface{}{
+			"name":        map[string]interface{}{"type": "string", "required": true, "unique": true},
 			"description": map[string]interface{}{"type": "string"},
 		},
 	})
@@ -141,9 +145,9 @@ func (ts *UserUsagesTestSuite) SetupSuite() {
 	firstAgentID, err := testutils.CreateAgent(testutils.Agent{
 		OUID:        ts.ouID,
 		Type:        "default",
-		Name:        "user-usages-first-agent",
 		Owner:       ts.ownerUserID,
 		Description: "First agent owned by the usages test user",
+		Attributes:  map[string]interface{}{"name": "user-usages-first-agent"},
 	})
 	ts.Require().NoError(err, "Failed to create the first owned agent")
 	ts.firstAgentID = firstAgentID
@@ -151,9 +155,9 @@ func (ts *UserUsagesTestSuite) SetupSuite() {
 	secondAgentID, err := testutils.CreateAgent(testutils.Agent{
 		OUID:        ts.ouID,
 		Type:        "default",
-		Name:        "user-usages-second-agent",
 		Owner:       ts.ownerUserID,
 		Description: "Second agent owned by the usages test user",
+		Attributes:  map[string]interface{}{"name": "user-usages-second-agent"},
 	})
 	ts.Require().NoError(err, "Failed to create the second owned agent")
 	ts.secondAgentID = secondAgentID

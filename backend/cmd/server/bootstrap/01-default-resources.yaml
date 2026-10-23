@@ -8,11 +8,14 @@ logoUrl: "avatar:shape=rounded,variant=anonymous_entity,content=pavilion,colors=
 resource_type: user_type
 id: 01900000-0000-7000-8000-000000000010
 category: user
-name: Person
+handle: person
+displayName: Person
 ouHandle: default
 allowSelfRegistration: true
 systemAttributes:
   display: username
+  primaryEmail: email
+  primaryMobile: mobile_number
 schema:
   username:
     type: string
@@ -20,7 +23,7 @@ schema:
     required: true
     unique: true
   email:
-    type: string
+    type: email
     displayName: Email
     required: true
     unique: true
@@ -34,9 +37,10 @@ schema:
     displayName: Last Name
     required: false
   mobile_number:
-    type: string
+    type: mobile
     displayName: Mobile Number
     required: false
+    regex: "^\\+[1-9]\\d{1,14}$"
   sub:
     type: string
     displayName: Subject
@@ -57,9 +61,17 @@ schema:
 ---
 resource_type: agent_type
 id: 01900000-0000-7000-8000-000000000011
-name: default
+handle: default
+displayName: Default
 ouHandle: default
+systemAttributes:
+  display: name
 schema:
+  name:
+    type: string
+    displayName: Name
+    required: true
+    unique: true
   modelProvider:
     type: string
     displayName: Model Provider
@@ -451,7 +463,7 @@ nodes:
 - id: send_recovery_email
   type: TASK_EXECUTION
   properties:
-    emailTemplate: PASSWORD_RECOVERY
+    emailTemplate: password-recovery
   executor:
     name: EmailExecutor
     mode: send
@@ -731,7 +743,7 @@ nodes:
 - id: send_recovery_email
   type: TASK_EXECUTION
   properties:
-    emailTemplate: PASSWORD_RECOVERY
+    emailTemplate: password-recovery
   executor:
     name: EmailExecutor
     mode: send
@@ -1688,7 +1700,7 @@ nodes:
 - id: send_invite_email
   type: TASK_EXECUTION
   properties:
-    emailTemplate: USER_INVITE
+    emailTemplate: user-invite
   executor:
     name: EmailExecutor
     mode: send
@@ -2123,6 +2135,7 @@ nodes:
   type: TASK_EXECUTION
   executor:
     name: CriteriaRevocationExecutor
+    mode: revoke
   onSuccess: regenerate_secret
   layout:
     size:
@@ -2135,13 +2148,26 @@ nodes:
   type: TASK_EXECUTION
   executor:
     name: ClientSecretExecutor
-  onSuccess: end
+  onSuccess: advance_cutoff
   layout:
     size:
       width: 250
       height: 113
     position:
       x: 1200
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1490
       y: 175
 - id: end
   type: END
@@ -2150,7 +2176,564 @@ nodes:
       width: 85
       height: 34
     position:
-      x: 1520
+      x: 1810
+      y: 200
+---
+resource_type: flow
+id: 01900000-0000-7000-8000-000000000081
+name: Default Role Assignment Removal Flow
+handle: default-role-assignment-removal-flow
+flowType: ADMINISTRATION
+nodes:
+- id: start
+  type: START
+  onSuccess: permission_validator
+  layout:
+    size:
+      width: 101
+      height: 34
+    position:
+      x: 100
+      y: 200
+- id: permission_validator
+  type: TASK_EXECUTION
+  properties:
+    requiredScopes:
+    - system
+  executor:
+    name: PermissionValidator
+  onSuccess: pre_role_assignment_removal
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 300
+      y: 175
+- id: pre_role_assignment_removal
+  type: TASK_EXECUTION
+  executor:
+    name: AccessChangeValidator
+    mode: role_assignment_removal
+  onSuccess: revoke_scopes
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 580
+      y: 175
+- id: revoke_scopes
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: revoke
+  onSuccess: remove_assignment
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 900
+      y: 175
+- id: remove_assignment
+  type: TASK_EXECUTION
+  executor:
+    name: RoleExecutor
+    mode: role_assignment_removal
+  onSuccess: advance_cutoff
+  layout:
+    size:
+      width: 230
+      height: 113
+    position:
+      x: 1180
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1470
+      y: 175
+- id: end
+  type: END
+  layout:
+    size:
+      width: 85
+      height: 34
+    position:
+      x: 1790
+      y: 200
+---
+resource_type: flow
+id: 01900000-0000-7000-8000-00000000007c
+name: Default Action Deletion Flow
+handle: default-action-deletion-flow
+flowType: ADMINISTRATION
+nodes:
+- id: start
+  type: START
+  onSuccess: permission_validator
+  layout:
+    size:
+      width: 101
+      height: 34
+    position:
+      x: 100
+      y: 200
+- id: permission_validator
+  type: TASK_EXECUTION
+  properties:
+    requiredScopes:
+    - system
+  executor:
+    name: PermissionValidator
+  onSuccess: pre_action_deletion
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 300
+      y: 175
+- id: pre_action_deletion
+  type: TASK_EXECUTION
+  executor:
+    name: AccessChangeValidator
+    mode: action_deletion
+  onSuccess: revoke_scopes
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 580
+      y: 175
+- id: revoke_scopes
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: revoke
+  onSuccess: delete_action
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 900
+      y: 175
+- id: delete_action
+  type: TASK_EXECUTION
+  executor:
+    name: ActionDeletionExecutor
+  onSuccess: advance_cutoff
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 1180
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1470
+      y: 175
+- id: end
+  type: END
+  layout:
+    size:
+      width: 85
+      height: 34
+    position:
+      x: 1790
+      y: 200
+---
+resource_type: flow
+id: 01900000-0000-7000-8000-00000000007d
+name: Default Role Deletion Flow
+handle: default-role-deletion-flow
+flowType: ADMINISTRATION
+nodes:
+- id: start
+  type: START
+  onSuccess: permission_validator
+  layout:
+    size:
+      width: 101
+      height: 34
+    position:
+      x: 100
+      y: 200
+- id: permission_validator
+  type: TASK_EXECUTION
+  properties:
+    requiredScopes:
+    - system
+  executor:
+    name: PermissionValidator
+  onSuccess: pre_role_deletion
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 300
+      y: 175
+- id: pre_role_deletion
+  type: TASK_EXECUTION
+  executor:
+    name: AccessChangeValidator
+    mode: role_deletion
+  onSuccess: revoke_scopes
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 580
+      y: 175
+- id: revoke_scopes
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: revoke
+  onSuccess: delete_role
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 900
+      y: 175
+- id: delete_role
+  type: TASK_EXECUTION
+  executor:
+    name: RoleExecutor
+    mode: role_deletion
+  onSuccess: advance_cutoff
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 1180
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1470
+      y: 175
+- id: end
+  type: END
+  layout:
+    size:
+      width: 85
+      height: 34
+    position:
+      x: 1790
+      y: 200
+---
+resource_type: flow
+id: 01900000-0000-7000-8000-00000000007e
+name: Default Group Deletion Flow
+handle: default-group-deletion-flow
+flowType: ADMINISTRATION
+nodes:
+- id: start
+  type: START
+  onSuccess: permission_validator
+  layout:
+    size:
+      width: 101
+      height: 34
+    position:
+      x: 100
+      y: 200
+- id: permission_validator
+  type: TASK_EXECUTION
+  properties:
+    requiredScopes:
+    - system:group
+  executor:
+    name: PermissionValidator
+  onSuccess: pre_group_deletion
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 300
+      y: 175
+- id: pre_group_deletion
+  type: TASK_EXECUTION
+  executor:
+    name: AccessChangeValidator
+    mode: group_deletion
+  onSuccess: revoke_scopes
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 580
+      y: 175
+- id: revoke_scopes
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: revoke
+  onSuccess: delete_group
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 900
+      y: 175
+- id: delete_group
+  type: TASK_EXECUTION
+  executor:
+    name: GroupExecutor
+    mode: group_deletion
+  onSuccess: advance_cutoff
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 1180
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1470
+      y: 175
+- id: end
+  type: END
+  layout:
+    size:
+      width: 85
+      height: 34
+    position:
+      x: 1790
+      y: 200
+---
+resource_type: flow
+id: 01900000-0000-7000-8000-00000000007f
+name: Default Group Membership Removal Flow
+handle: default-group-membership-removal-flow
+flowType: ADMINISTRATION
+nodes:
+- id: start
+  type: START
+  onSuccess: permission_validator
+  layout:
+    size:
+      width: 101
+      height: 34
+    position:
+      x: 100
+      y: 200
+- id: permission_validator
+  type: TASK_EXECUTION
+  properties:
+    requiredScopes:
+    - system:group
+  executor:
+    name: PermissionValidator
+  onSuccess: pre_group_membership_removal
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 300
+      y: 175
+- id: pre_group_membership_removal
+  type: TASK_EXECUTION
+  executor:
+    name: AccessChangeValidator
+    mode: group_membership_removal
+  onSuccess: revoke_scopes
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 580
+      y: 175
+- id: revoke_scopes
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: revoke
+  onSuccess: remove_member
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 900
+      y: 175
+- id: remove_member
+  type: TASK_EXECUTION
+  executor:
+    name: GroupExecutor
+    mode: group_membership_removal
+  onSuccess: advance_cutoff
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1180
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1470
+      y: 175
+- id: end
+  type: END
+  layout:
+    size:
+      width: 85
+      height: 34
+    position:
+      x: 1790
+      y: 200
+---
+resource_type: flow
+id: 01900000-0000-7000-8000-000000000080
+name: Default Role Permission Removal Flow
+handle: default-role-permission-removal-flow
+flowType: ADMINISTRATION
+nodes:
+- id: start
+  type: START
+  onSuccess: permission_validator
+  layout:
+    size:
+      width: 101
+      height: 34
+    position:
+      x: 100
+      y: 200
+- id: permission_validator
+  type: TASK_EXECUTION
+  properties:
+    requiredScopes:
+    - system
+  executor:
+    name: PermissionValidator
+  onSuccess: pre_role_permission_removal
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 300
+      y: 175
+- id: pre_role_permission_removal
+  type: TASK_EXECUTION
+  executor:
+    name: AccessChangeValidator
+    mode: role_permission_removal
+  onSuccess: revoke_scopes
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 580
+      y: 175
+- id: revoke_scopes
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: revoke
+  onSuccess: update_permissions
+  layout:
+    size:
+      width: 206
+      height: 113
+    position:
+      x: 900
+      y: 175
+- id: update_permissions
+  type: TASK_EXECUTION
+  executor:
+    name: RoleExecutor
+    mode: role_permission_removal
+  onSuccess: advance_cutoff
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1180
+      y: 175
+- id: advance_cutoff
+  type: TASK_EXECUTION
+  executor:
+    name: CriteriaRevocationExecutor
+    mode: advance_cutoff
+  onSuccess: end
+  layout:
+    size:
+      width: 260
+      height: 113
+    position:
+      x: 1470
+      y: 175
+- id: end
+  type: END
+  layout:
+    size:
+      width: 85
+      height: 34
+    position:
+      x: 1790
       y: 200
 ---
 resource_type: flow
@@ -2304,7 +2887,7 @@ nodes:
   type: TASK_EXECUTION
   executor:
     name: OwnerResolver
-  onSuccess: prompt_agent_name
+  onSuccess: provisioning
   onIncomplete: prompt_owner
   layout:
     size:
@@ -2357,50 +2940,6 @@ nodes:
     position:
       x: 580
       y: -320
-- id: prompt_agent_name
-  type: PROMPT
-  meta:
-    components:
-    - align: left
-      type: TEXT
-      id: text_header_agent_name
-      label: '{{ t(agentOnboarding:forms.agent_name.title) }}'
-      variant: HEADING_1
-    - align: left
-      type: TEXT
-      id: text_subtitle_agent_name
-      label: '{{ t(agentOnboarding:forms.agent_name.subtitle) }}'
-      variant: HEADING_6
-    - type: BLOCK
-      id: block_agent_name
-      components:
-      - id: input_agent_name
-        ref: name
-        type: TEXT_INPUT
-        label: '{{ t(agentOnboarding:forms.agent_name.fields.name.label) }}'
-        required: true
-        placeholder: '{{ t(agentOnboarding:forms.agent_name.fields.name.placeholder) }}'
-      - type: ACTION
-        id: action_agent_name
-        label: '{{ t(agentOnboarding:forms.agent_name.actions.next.label) }}'
-        variant: PRIMARY
-        eventType: SUBMIT
-  prompts:
-  - inputs:
-    - ref: input_agent_name
-      identifier: name
-      type: TEXT_INPUT
-      required: true
-    action:
-      ref: action_agent_name
-      nextNode: provisioning
-  layout:
-    size:
-      width: 350
-      height: 410
-    position:
-      x: 900
-      y: 100
 - id: prompt_agent_details
   type: PROMPT
   meta:
@@ -2418,6 +2957,12 @@ nodes:
     - type: BLOCK
       id: block_agent_details
       components:
+      - id: input_agent_name
+        ref: name
+        type: TEXT_INPUT
+        label: '{{ t(agentOnboarding:forms.agent_details.fields.name.label) }}'
+        required: true
+        placeholder: '{{ t(agentOnboarding:forms.agent_details.fields.name.placeholder) }}'
       - id: input_agent_model_provider
         ref: modelProvider
         type: SELECT
@@ -2445,6 +2990,10 @@ nodes:
         eventType: SUBMIT
   prompts:
   - inputs:
+    - ref: input_agent_name
+      identifier: name
+      type: TEXT_INPUT
+      required: true
     - ref: input_agent_model_provider
       identifier: modelProvider
       type: SELECT
@@ -2463,9 +3012,9 @@ nodes:
   layout:
     size:
       width: 350
-      height: 566
+      height: 646
     position:
-      x: 1250
+      x: 1130
       y: 60
 - id: agent_attribute_uniqueness
   type: TASK_EXECUTION
@@ -2480,7 +3029,7 @@ nodes:
       width: 206
       height: 113
     position:
-      x: 1480
+      x: 1500
       y: 175
 - id: provisioning
   type: TASK_EXECUTION
@@ -2491,13 +3040,13 @@ nodes:
     name: ProvisioningExecutor
   onSuccess: agent_credentials
   onIncomplete: prompt_agent_details
-  onFailure: prompt_agent_name
+  onFailure: prompt_agent_details
   layout:
     size:
       width: 206
       height: 113
     position:
-      x: 1620
+      x: 900
       y: 175
 - id: agent_credentials
   type: PROMPT
@@ -2534,7 +3083,7 @@ nodes:
       width: 350
       height: 520
     position:
-      x: 1900
+      x: 1760
       y: 60
 - id: end
   type: END
@@ -2543,7 +3092,7 @@ nodes:
       width: 85
       height: 34
     position:
-      x: 2250
+      x: 2110
       y: 200
 ---
 resource_type: theme
@@ -5576,7 +6125,7 @@ signOutFlowId: 01900000-0000-7000-8000-00000000006a
 recoveryFlowId: 01900000-0000-7000-8000-000000000070
 isRecoveryFlowEnabled: false
 allowedUserTypes:
-  - Person
+  - person
 inboundAuthConfig:
   - type: oauth2
     config:
@@ -5638,7 +6187,7 @@ inboundAuthConfig:
 ---
 resource_type: user
 id: 01900000-0000-7000-8000-000000000030
-type: Person
+type: person
 ouHandle: default
 attributes:
   username: "{{ .ADMIN_USERNAME }}"
@@ -5752,13 +6301,10 @@ translations:
     forms.owner.fields.owner.label: Owner
     forms.owner.fields.owner.placeholder: Select a user
     forms.owner.actions.next.label: Continue
-    forms.agent_name.title: Name Your Agent
-    forms.agent_name.subtitle: Give the agent a name you will recognize later.
-    forms.agent_name.fields.name.label: Name
-    forms.agent_name.fields.name.placeholder: Enter a name for the agent
-    forms.agent_name.actions.next.label: Continue
     forms.agent_details.title: Agent Details
-    forms.agent_details.subtitle: Describe the model this agent runs on and what it does.
+    forms.agent_details.subtitle: Name the agent and describe the model it runs on and what it does.
+    forms.agent_details.fields.name.label: Name
+    forms.agent_details.fields.name.placeholder: Enter a name for the agent
     forms.agent_details.fields.model_provider.label: Model Provider
     forms.agent_details.fields.model_provider.placeholder: Select a model provider
     forms.agent_details.fields.model.label: Model
@@ -6008,8 +6554,324 @@ translations:
   elements:
     fields.usertype.label: User Type
     fields.usertype.placeholder: Select User Type
+    forms.link_prompt.title: Link your account
+    forms.link_prompt.description: Your details matched the account below. Do you want to link to it permanently?
+    forms.link_prompt.actions.confirm.label: Link account
+    forms.link_prompt.actions.reject.label: No, I want a separate account
+    forms.link_picker.title: Choose your account
+    forms.link_picker.description: This sign-in is linked to more than one account. Choose the one to continue with.
+    forms.link_picker.fields.ou.label: Organization
+    forms.link_picker.fields.ou.placeholder: Select an organization
+    forms.link_picker.actions.continue.label: Continue
   signout:
     forms.confirm.title: Sign out?
     forms.confirm.description: You are about to sign out of your account. Do you want to continue?
     forms.confirm.actions.submit.label: Sign out
     errors.failed.description: Something went wrong. Please try again.
+---
+resource_type: notification_template
+channel: email
+handle: user-invite
+ouHandle: default
+displayName: User Invitation Email
+description: Sent to invite a new user to complete their registration.
+content:
+  subject: "You're Invited to Register"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>You've Been Invited!</h2>
+      <p>You have been invited to create your account. Click the link below to complete your registration:</p>
+      <p><a href="{{ctx(inviteLink)}}" style="display: inline-block; padding: 10px 20px;
+        background-color: #3a87ed; color: #fff; text-decoration: none;
+        border-radius: 4px;">Complete Registration</a></p>
+      <p>If the button above doesn't work, copy and paste the following link into your browser:</p>
+      <p><a href="{{ctx(inviteLink)}}">{{ctx(inviteLink)}}</a></p>
+      <p>If you did not expect this invitation, you can safely ignore this email.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: sms
+handle: user-invite
+ouHandle: default
+displayName: User Invitation SMS
+description: Sent to invite a new user to complete their registration.
+content:
+  body: "You've been invited to register. Complete your account setup here: {{ctx(inviteLink)}}"
+---
+resource_type: notification_template
+channel: email
+handle: self-registration
+ouHandle: default
+displayName: Self Registration Invite Email
+description: Sent to complete a self-service registration.
+content:
+  subject: "Complete Your Registration for {{ctx(appName)}}"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Complete Your Registration for {{ctx(appName)}}</h2>
+      <p>You recently started the registration process for <strong>{{ctx(appName)}}</strong>. Click the link below to complete your account setup:</p>
+      <p><a href="{{ctx(inviteLink)}}" style="display: inline-block; padding: 10px 20px;
+        background-color: #3a87ed; color: #fff; text-decoration: none;
+        border-radius: 4px;">Complete Registration</a></p>
+      <p>If the button above doesn't work, copy and paste the following link into your browser:</p>
+      <p><a href="{{ctx(inviteLink)}}">{{ctx(inviteLink)}}</a></p>
+      <p>If you did not initiate this request, you can safely ignore this email.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: sms
+handle: self-registration
+ouHandle: default
+displayName: Self Registration Invite SMS
+description: Sent to complete a self-service registration.
+content:
+  body: "{{ctx(appName)}}: Finish your registration by clicking here: {{ctx(inviteLink)}}"
+---
+resource_type: notification_template
+channel: email
+handle: magic-link
+ouHandle: default
+displayName: Magic Link Sign-In Email
+description: Sent to let a user sign in through a secure link.
+content:
+  subject: "Sign in to your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign in to your account</h2>
+      <p>Use the secure link below to sign in:</p>
+      <p><a href="{{ctx(magicLink)}}" style="display: inline-block; padding: 10px 20px;
+        background-color: #3a87ed; color: #fff; text-decoration: none;
+        border-radius: 4px;">Sign in</a></p>
+      <p>This link expires in {{ctx(expiryTime)}}.</p>
+      <p>If the button above doesn't work, copy and paste the following link into your browser:</p>
+      <p style="word-break: break-all;"><a href="{{ctx(magicLink)}}">{{ctx(magicLink)}}</a></p>
+      <p>If you did not request this, you can safely ignore this email.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: password-recovery
+ouHandle: default
+displayName: Password Recovery Email
+description: Sent to let a user reset their account password.
+content:
+  subject: "Reset Your Password"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Reset Your Password</h2>
+      <p>Hello,</p>
+      <p>A request was made to reset your account password for {{ctx(appName)}}. Please use the button below to set a new password:</p>
+      <p>
+        <a href="{{ctx(inviteLink)}}" style="display: inline-block; padding: 12px 24px;
+        background-color: #3a87ed; color: #ffffff; text-decoration: none;
+        border-radius: 4px; font-weight: bold;">
+          Reset Password
+        </a>
+      </p>
+      <p>If the button doesn't work, copy and paste this link into your browser:</p>
+      <p style="word-break: break-all;">
+        <a href="{{ctx(inviteLink)}}">{{ctx(inviteLink)}}</a>
+      </p>
+      <p>This link will expire in <strong>30 minutes</strong> for your security.</p>
+      <p>If you did not request a password reset, you can safely ignore this email, your account will remain unchanged.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: ciba-notification
+ouHandle: default
+displayName: CIBA Authentication Notification Email
+description: Sent to approve a backchannel authentication request.
+content:
+  subject: "Authentication Request from {{ctx(appName)}}"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Authentication Request</h2>
+      <p><strong>{{ctx(appName)}}</strong> is requesting to authenticate you.</p>
+      <p style="padding: 12px; background-color: #f5f5f5; border-left: 4px solid #3a87ed;
+        border-radius: 4px; margin: 16px 0;">{{ctx(bindingMessage)}}</p>
+      <p>If you recognize this request, click the link below to approve:</p>
+      <p><a href="{{ctx(inviteLink)}}" style="display: inline-block; padding: 10px 20px;
+        background-color: #3a87ed; color: #fff; text-decoration: none;
+        border-radius: 4px;">Approve Authentication</a></p>
+      <p>If the button above doesn't work, copy and paste the following link into your browser:</p>
+      <p><a href="{{ctx(inviteLink)}}">{{ctx(inviteLink)}}</a></p>
+      <p>If you did not initiate this request, you can safely ignore this email.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: sms
+handle: ciba-notification
+ouHandle: default
+displayName: CIBA Authentication Notification SMS
+description: Sent to approve a backchannel authentication request.
+content:
+  body: "{{ctx(appName)}}: {{ctx(bindingMessage)}} Tap to approve: {{ctx(inviteLink)}}"
+---
+resource_type: notification_template
+channel: email
+handle: otp
+ouHandle: default
+displayName: Email OTP Verification
+description: Sent to verify a user's email address with a one-time passcode.
+content:
+  subject: "Your verification code"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Your verification code</h2>
+      <p>Use the following code to complete your verification:</p>
+      <table cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #3a87ed; background: #f0f4ff; border: 1px solid #c0d0f0; border-radius: 6px; padding: 12px 24px;">{{ctx(otpCode)}}</td>
+        </tr>
+      </table>
+      <p>This code will expire in {{ctx(expiryTime)}}.</p>
+      <p>If you did not request this, you can safely ignore this email.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: sms
+handle: otp
+ouHandle: default
+displayName: SMS OTP Verification
+description: Sent to verify a user's phone number with a one-time passcode.
+content:
+  body: "Your verification code is: {{ctx(otpCode)}}. It expires in {{ctx(expiryTime)}}."
+---
+resource_type: notification_template
+channel: email
+handle: account-locked
+ouHandle: default
+displayName: Account Temporarily Locked Email
+description: Sent when repeated failed sign-ins lock sign-in to the account for a limited time.
+content:
+  subject: "Sign-in was temporarily locked on your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign-in temporarily locked</h2>
+      <p>Sign-in to your account has been temporarily locked due to multiple failed attempts.</p>
+      <p><strong>It will be available again in {{ctx(lockDuration)}}, on {{ctx(unlockTime)}} UTC.</strong></p>
+      <p>To regain access sooner, complete account recovery or contact your administrator.</p>
+      <p><strong>Didn't try to sign in?</strong> Someone else may be trying to get into your account. Report this to your administrator. Once you regain access, change your credentials and check that your email address and phone number are still yours.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: account-locked-permanent
+ouHandle: default
+displayName: Account Locked Email
+description: Sent when repeated failed sign-ins lock sign-in to the account until it is released.
+content:
+  subject: "Sign-in was locked on your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign-in locked</h2>
+      <p>Sign-in to your account has been locked due to multiple failed attempts.</p>
+      <p><strong>This lock does not expire automatically.</strong></p>
+      <p>To regain access, complete account recovery or contact your administrator.</p>
+      <p><strong>Didn't try to sign in?</strong> Someone else may be trying to get into your account. Report this to your administrator. Once you regain access, change your credentials and check that your email address and phone number are still yours.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: account-locked-credential
+ouHandle: default
+displayName: Credential Sign-in Temporarily Locked Email
+description: Sent when repeated failed sign-ins lock credential sign-in for a limited time.
+content:
+  subject: "Sign-in was temporarily locked on your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign-in temporarily locked</h2>
+      <p>Credential sign-in has been temporarily locked due to multiple failed attempts.</p>
+      <p><strong>It will be available again in {{ctx(lockDuration)}}, on {{ctx(unlockTime)}} UTC.</strong></p>
+      <p>To regain access sooner, complete account recovery or contact your administrator.</p>
+      <p><strong>Didn't try to sign in?</strong> Someone else may be trying to get into your account. Report this to your administrator. Once you regain access, change your credentials and check that your email address and phone number are still yours.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: account-locked-credential-permanent
+ouHandle: default
+displayName: Credential Sign-in Locked Email
+description: Sent when repeated failed sign-ins lock credential sign-in until it is released.
+content:
+  subject: "Sign-in was locked on your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign-in locked</h2>
+      <p>Credential sign-in has been locked due to multiple failed attempts.</p>
+      <p><strong>This lock does not expire automatically.</strong></p>
+      <p>To regain access, complete account recovery or contact your administrator.</p>
+      <p><strong>Didn't try to sign in?</strong> Someone else may be trying to get into your account. Report this to your administrator. Once you regain access, change your credentials and check that your email address and phone number are still yours.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: account-locked-otp
+ouHandle: default
+displayName: Verification Code Sign-in Temporarily Locked Email
+description: Sent when repeated failed sign-ins lock verification code sign-in for a limited time.
+content:
+  subject: "Sign-in was temporarily locked on your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign-in temporarily locked</h2>
+      <p>Verification code sign-in has been temporarily locked due to multiple failed attempts.</p>
+      <p><strong>It will be available again in {{ctx(lockDuration)}}, on {{ctx(unlockTime)}} UTC.</strong></p>
+      <p>To regain access sooner, complete account recovery or contact your administrator.</p>
+      <p><strong>Didn't try to sign in?</strong> Someone else may be trying to get into your account. Report this to your administrator. Once you regain access, change your credentials and check that your email address and phone number are still yours.</p>
+    </body>
+    </html>
+---
+resource_type: notification_template
+channel: email
+handle: account-locked-otp-permanent
+ouHandle: default
+displayName: Verification Code Sign-in Locked Email
+description: Sent when repeated failed sign-ins lock verification code sign-in until it is released.
+content:
+  subject: "Sign-in was locked on your account"
+  body: |
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #181818;">
+      <h2>Sign-in locked</h2>
+      <p>Verification code sign-in has been locked due to multiple failed attempts.</p>
+      <p><strong>This lock does not expire automatically.</strong></p>
+      <p>To regain access, complete account recovery or contact your administrator.</p>
+      <p><strong>Didn't try to sign in?</strong> Someone else may be trying to get into your account. Report this to your administrator. Once you regain access, change your credentials and check that your email address and phone number are still yours.</p>
+    </body>
+    </html>

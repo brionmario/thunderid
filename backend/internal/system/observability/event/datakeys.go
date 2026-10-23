@@ -47,6 +47,20 @@ var DataKey = struct {
 	GrantType        string
 	JTI              string
 	RevocationReason string
+	AccessingOUID    string
+
+	// Administration Keys. Records whether an operator note was given, never the note itself.
+	OperatorNoteRecorded string
+
+	// Account Lock Keys. UnlockAt is set only for a lock that expires.
+	LockMethod    string
+	LockCount     string
+	LockPermanent string
+	UnlockAt      string
+
+	// Session & Delivery Keys
+	SessionID  string
+	HTTPStatus string
 
 	// Event Metadata Keys
 	Message       string
@@ -91,6 +105,20 @@ var DataKey = struct {
 	GrantType:        "grant_type",
 	JTI:              "jti",
 	RevocationReason: "revocation_reason",
+	AccessingOUID:    "accessing_ou_id",
+
+	// Administration Keys
+	OperatorNoteRecorded: "operator_note_recorded",
+
+	// Account Lock Keys
+	LockMethod:    "lock_method",
+	LockCount:     "lock_count",
+	LockPermanent: "lock_permanent",
+	UnlockAt:      "unlock_at",
+
+	// Session & Delivery Keys
+	SessionID:  "session_id",
+	HTTPStatus: "http_status",
 
 	// Event Metadata Keys
 	Message:       "message",

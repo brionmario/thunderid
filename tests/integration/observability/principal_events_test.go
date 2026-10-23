@@ -45,7 +45,8 @@ const (
 )
 
 var obsUserType = testutils.UserType{
-	Name: obsUserTypeName,
+	Handle:      obsUserTypeName,
+	DisplayName: "Obs Principal Person",
 	Schema: map[string]interface{}{
 		"username": map[string]interface{}{"type": "string"},
 		"password": map[string]interface{}{"type": "string", "credential": true},
@@ -151,9 +152,11 @@ func (ts *PrincipalEventsTestSuite) SetupSuite() {
 	ts.agentTypeSnapshot = snapshot
 
 	_, err = testutils.CreateAgentType(testutils.UserType{
-		Name: "default",
-		OUID: ouID,
+		Handle:      "default",
+		DisplayName: "Default",
+		OUID:        ouID,
 		Schema: map[string]interface{}{
+			"name":        map[string]interface{}{"type": "string", "required": true, "unique": true},
 			"description": map[string]interface{}{"type": "string"},
 		},
 	})
@@ -613,9 +616,9 @@ func (ts *PrincipalEventsTestSuite) createApplication(
 // createAgent creates an agent with a client_credentials OAuth profile and returns its resource ID.
 func (ts *PrincipalEventsTestSuite) createAgent() string {
 	agent := map[string]interface{}{
-		"name": "Observability Principal Agent",
-		"type": "default",
-		"ouId": ts.ouID,
+		"type":       "default",
+		"ouId":       ts.ouID,
+		"attributes": map[string]interface{}{"name": "Observability Principal Agent"},
 		"inboundAuthConfig": []map[string]interface{}{
 			{
 				"type": "oauth2",

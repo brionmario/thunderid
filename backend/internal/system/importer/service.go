@@ -6,6 +6,7 @@ package importer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 
 	agentmodel "github.com/thunder-id/thunderid/internal/agent/model"
+	"github.com/thunder-id/thunderid/internal/application"
 	appmodel "github.com/thunder-id/thunderid/internal/application/model"
 	"github.com/thunder-id/thunderid/internal/connection"
 	"github.com/thunder-id/thunderid/internal/connection/authzenpdp"
@@ -23,9 +25,13 @@ import (
 	flowmgt "github.com/thunder-id/thunderid/internal/flow/mgt"
 	"github.com/thunder-id/thunderid/internal/group"
 	ncommon "github.com/thunder-id/thunderid/internal/notification/common"
+	"github.com/thunder-id/thunderid/internal/notificationtemplate"
+	"github.com/thunder-id/thunderid/internal/ou"
 	"github.com/thunder-id/thunderid/internal/resource"
 	"github.com/thunder-id/thunderid/internal/role"
+	"github.com/thunder-id/thunderid/internal/sharing"
 	"github.com/thunder-id/thunderid/internal/system/log"
+	"github.com/thunder-id/thunderid/internal/system/secretresolver"
 	"github.com/thunder-id/thunderid/internal/vc/credential"
 	"github.com/thunder-id/thunderid/internal/vc/presentation"
 )
@@ -40,6 +46,7 @@ type applicationAdapter interface {
 		*appmodel.ApplicationDTO,
 		*tidcommon.ServiceError,
 	)
+	DeleteApplication(ctx context.Context, appID string) *tidcommon.ServiceError
 }
 
 type idpAdapter interface {
@@ -50,6 +57,7 @@ type idpAdapter interface {
 		*providers.IDPDTO,
 		*tidcommon.ServiceError,
 	)
+	DeleteIdentityProvider(ctx context.Context, idpID string) *tidcommon.ServiceError
 }
 
 // senderAdapter is the subset of notification.NotificationSenderMgtSvcInterface the importer
@@ -64,6 +72,7 @@ type senderAdapter interface {
 		*ncommon.NotificationSenderDTO,
 		*tidcommon.ServiceError,
 	)
+	DeleteSender(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 // authZENPDPAdapter defines the AuthZEN PDP connection operations required by the importer.
@@ -78,6 +87,7 @@ type authZENPDPAdapter interface {
 		id string,
 		request authzenpdp.ConnectionRequest,
 	) (*authzenpdp.AuthZENPDPConnection, *tidcommon.ServiceError)
+	DeleteAuthZENPDPConnection(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type flowAdapter interface {
@@ -90,21 +100,23 @@ type flowAdapter interface {
 		*tidcommon.ServiceError)
 	UpdateFlow(ctx context.Context, flowID string, flowDef *flowmgt.FlowDefinition) (*providers.CompleteFlowDefinition,
 		*tidcommon.ServiceError)
+	DeleteFlow(ctx context.Context, flowID string) *tidcommon.ServiceError
 }
 
 type ouAdapter interface {
-	CreateOrganizationUnit(ctx context.Context, request providers.OrganizationUnitRequestWithID) (
-		providers.OrganizationUnit,
+	CreateOrganizationUnit(ctx context.Context, request ou.OrganizationUnitRequestWithID) (
+		ou.OrganizationUnit,
 		*tidcommon.ServiceError,
 	)
-	GetOrganizationUnit(ctx context.Context, id string) (providers.OrganizationUnit, *tidcommon.ServiceError)
+	GetOrganizationUnit(ctx context.Context, id string) (ou.OrganizationUnit, *tidcommon.ServiceError)
 	GetOrganizationUnitByPath(ctx context.Context, handlePath string) (
-		providers.OrganizationUnit,
+		ou.OrganizationUnit,
 		*tidcommon.ServiceError,
 	)
-	UpdateOrganizationUnit(ctx context.Context, id string, request providers.OrganizationUnitRequestWithID) (
-		providers.OrganizationUnit,
+	UpdateOrganizationUnit(ctx context.Context, id string, request ou.OrganizationUnitRequestWithID) (
+		ou.OrganizationUnit,
 		*tidcommon.ServiceError)
+	DeleteOrganizationUnit(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type entityTypeAdapter interface {
@@ -114,12 +126,13 @@ type entityTypeAdapter interface {
 	GetEntityType(ctx context.Context, category entitytype.TypeCategory, schemaID string,
 		includeDisplay bool) (*entitytype.EntityType,
 		*tidcommon.ServiceError)
-	GetEntityTypeByName(ctx context.Context, category entitytype.TypeCategory,
-		schemaName string) (*entitytype.EntityType, *tidcommon.ServiceError)
+	GetEntityTypeByHandle(ctx context.Context, category entitytype.TypeCategory,
+		handle string) (*entitytype.EntityType, *tidcommon.ServiceError)
 	UpdateEntityType(ctx context.Context, category entitytype.TypeCategory, schemaID string,
 		request entitytype.UpdateEntityTypeRequest) (
 		*entitytype.EntityType,
 		*tidcommon.ServiceError)
+	DeleteEntityType(ctx context.Context, category entitytype.TypeCategory, schemaID string) *tidcommon.ServiceError
 }
 
 type roleAdapter interface {
@@ -128,10 +141,17 @@ type roleAdapter interface {
 	GetRoleWithPermissions(ctx context.Context, id string) (*role.RoleWithPermissions, *tidcommon.ServiceError)
 	UpdateRoleWithPermissions(ctx context.Context, id string, role role.RoleUpdateDetail) (*role.RoleWithPermissions,
 		*tidcommon.ServiceError)
+	DeleteRole(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type roleAssignmentAdapter interface {
 	AddAssignments(ctx context.Context, id string, assignments []role.RoleAssignment) *tidcommon.ServiceError
+}
+
+// sharingPolicyAdapter applies the sharing policies a document carries for one resource.
+type sharingPolicyAdapter interface {
+	ReplacePoliciesForResource(ctx context.Context, rt sharing.ResourceType, resourceID, owningOUID string,
+		requests []sharing.PolicyRequest) (sharing.PolicyReplay, *sharing.PolicyReplayError)
 }
 
 type groupAdapter interface {
@@ -141,6 +161,7 @@ type groupAdapter interface {
 		*group.Group, *tidcommon.ServiceError)
 	AddGroupMembers(ctx context.Context, groupID string, members []group.Member) (
 		*group.Group, *tidcommon.ServiceError)
+	DeleteGroup(ctx context.Context, groupID string) *tidcommon.ServiceError
 }
 
 type resourceServerAdapter interface {
@@ -155,6 +176,7 @@ type resourceServerAdapter interface {
 		*resource.ResourceList, *tidcommon.ServiceError)
 	CreateAction(ctx context.Context, resourceServerID string, resourceID *string, action providers.Action) (
 		*providers.Action, *tidcommon.ServiceError)
+	DeleteResourceServer(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type themeAdapter interface {
@@ -163,6 +185,7 @@ type themeAdapter interface {
 	GetTheme(ctx context.Context, id string) (*thememgt.Theme, *tidcommon.ServiceError)
 	UpdateTheme(ctx context.Context,
 		id string, theme thememgt.UpdateThemeRequest) (*thememgt.Theme, *tidcommon.ServiceError)
+	DeleteTheme(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type layoutAdapter interface {
@@ -171,6 +194,7 @@ type layoutAdapter interface {
 	GetLayout(ctx context.Context, id string) (*layoutmgt.Layout, *tidcommon.ServiceError)
 	UpdateLayout(ctx context.Context,
 		id string, layout layoutmgt.UpdateLayoutRequest) (*layoutmgt.Layout, *tidcommon.ServiceError)
+	DeleteLayout(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type userAdapter interface {
@@ -194,6 +218,7 @@ type agentAdapter interface {
 		*agentmodel.AgentGetResponse, *tidcommon.ServiceError)
 	UpdateAgent(ctx context.Context, agentID string, req *agentmodel.UpdateAgentRequest) (
 		*agentmodel.AgentCompleteResponse, *tidcommon.ServiceError)
+	DeleteAgent(ctx context.Context, agentID string) *tidcommon.ServiceError
 }
 
 type presentationDefinitionAdapter interface {
@@ -203,6 +228,7 @@ type presentationDefinitionAdapter interface {
 		*presentation.PresentationDefinitionDTO, *tidcommon.ServiceError)
 	UpdatePresentationDefinition(ctx context.Context, id string, dto *presentation.PresentationDefinitionDTO) (
 		*presentation.PresentationDefinitionDTO, *tidcommon.ServiceError)
+	DeletePresentationDefinition(ctx context.Context, id string) *tidcommon.ServiceError
 }
 
 type credentialConfigurationAdapter interface {
@@ -212,6 +238,20 @@ type credentialConfigurationAdapter interface {
 		*credential.CredentialConfigurationDTO, *tidcommon.ServiceError)
 	UpdateCredentialConfiguration(ctx context.Context, id string, dto *credential.CredentialConfigurationDTO) (
 		*credential.CredentialConfigurationDTO, *tidcommon.ServiceError)
+	DeleteCredentialConfiguration(ctx context.Context, id string) *tidcommon.ServiceError
+}
+
+// notificationTemplateAdapter exposes the service methods needed by the importer.
+// Delete is omitted because templates require both channel and ID, which shared import-delete cannot provide.
+type notificationTemplateAdapter interface {
+	GetTemplateByHandle(ctx context.Context, channel notificationtemplate.ChannelType, handle string) (
+		*notificationtemplate.Template, *tidcommon.ServiceError)
+	ValidateTemplate(ctx context.Context, channel notificationtemplate.ChannelType,
+		request notificationtemplate.CreateTemplateRequest) *tidcommon.ServiceError
+	CreateTemplate(ctx context.Context, channel notificationtemplate.ChannelType,
+		request notificationtemplate.CreateTemplateRequest) (*notificationtemplate.Template, *tidcommon.ServiceError)
+	UpdateTemplate(ctx context.Context, channel notificationtemplate.ChannelType, id string,
+		request notificationtemplate.UpdateTemplateRequest) (*notificationtemplate.Template, *tidcommon.ServiceError)
 }
 
 // ImportServiceInterface defines runtime resource import and declarative resource deletion operations.
@@ -239,6 +279,7 @@ type importService struct {
 	entityTypeService              entityTypeAdapter
 	roleService                    roleAdapter
 	roleAssignmentService          roleAssignmentAdapter
+	sharingService                 sharingPolicyAdapter
 	groupService                   groupAdapter
 	resourceService                resourceServerAdapter
 	themeService                   themeAdapter
@@ -249,6 +290,12 @@ type importService struct {
 	presentationDefinitionService  presentationDefinitionAdapter
 	credentialConfigurationService credentialConfigurationAdapter
 	serverConfigService            serverConfigAdapter
+	gatewayService                 gatewayAdapter
+	notifTemplateService           notificationTemplateAdapter
+	// references replaces a var: or sec: reference with the value this deployment holds. Nil leaves
+	// references in place, which is what a control plane wants: it keeps configuration as references
+	// and holds no values.
+	references *secretresolver.Resolver
 }
 
 func newImportService(
@@ -270,6 +317,8 @@ func newImportService(
 	presentationDefinitionService presentationDefinitionAdapter,
 	credentialConfigurationService credentialConfigurationAdapter,
 	serverConfigService serverConfigAdapter,
+	gatewayService gatewayAdapter,
+	notifTemplateService notificationTemplateAdapter,
 	authZENPDPServices ...authZENPDPAdapter,
 ) ImportServiceInterface {
 	var authZENPDPService authZENPDPAdapter
@@ -296,13 +345,15 @@ func newImportService(
 		presentationDefinitionService:  presentationDefinitionService,
 		credentialConfigurationService: credentialConfigurationService,
 		serverConfigService:            serverConfigService,
+		gatewayService:                 gatewayService,
+		notifTemplateService:           notifTemplateService,
 	}
 }
 
 func (s *importService) ImportResources(
 	ctx context.Context, request *ImportRequest,
 ) (*ImportResponse, *tidcommon.ServiceError) {
-	if request == nil || request.Content == "" {
+	if request == nil || (request.Content == "" && len(request.Deletions) == 0) {
 		return nil, tidcommon.CustomServiceError(ErrorInvalidImportRequest,
 			tidcommon.I18nMessage{Key: "error.import.emptyContent", DefaultValue: "import content cannot be empty"})
 	}
@@ -333,18 +384,22 @@ func (s *importService) ImportResources(
 		)
 	}
 
-	resolvedContent, err := resolveTemplate(request.Content, request.Variables)
-	if err != nil {
-		log.GetLogger().Warn(ctx, "Import template resolution failed", log.String("error", err.Error()))
-		return nil, tidcommon.CustomServiceError(ErrorTemplateResolutionFailed,
-			tidcommon.I18nMessage{Key: "error.import.dynamic", DefaultValue: err.Error()})
-	}
+	// A request may carry only deletions, in which case there is no payload to resolve or parse.
+	var docs []parsedDocument
+	if request.Content != "" {
+		resolvedContent, err := resolveTemplate(request.Content, request.Variables)
+		if err != nil {
+			log.GetLogger().Warn(ctx, "Import template resolution failed", log.String("error", err.Error()))
+			return nil, tidcommon.CustomServiceError(ErrorTemplateResolutionFailed,
+				tidcommon.I18nMessage{Key: "error.import.dynamic", DefaultValue: err.Error()})
+		}
 
-	docs, err := parseDocuments(resolvedContent)
-	if err != nil {
-		log.GetLogger().Warn(ctx, "Import YAML parsing failed", log.String("error", err.Error()))
-		return nil, tidcommon.CustomServiceError(ErrorInvalidYAMLContent,
-			tidcommon.I18nMessage{Key: "error.import.dynamic", DefaultValue: err.Error()})
+		docs, err = parseDocuments(resolvedContent)
+		if err != nil {
+			log.GetLogger().Warn(ctx, "Import YAML parsing failed", log.String("error", err.Error()))
+			return nil, tidcommon.CustomServiceError(ErrorInvalidYAMLContent,
+				tidcommon.I18nMessage{Key: "error.import.dynamic", DefaultValue: err.Error()})
+		}
 	}
 
 	results := make([]ImportItemOutcome, 0, len(docs))
@@ -363,7 +418,10 @@ func (s *importService) ImportResources(
 			}
 		}
 
-		outcome := s.importDocument(ctx, doc, options, request.DryRun, flowIDAliases)
+		outcome, resolved := s.resolveReferences(ctx, doc)
+		if resolved {
+			outcome = s.importDocument(ctx, doc, options, request.DryRun, flowIDAliases)
+		}
 		results = append(results, outcome)
 
 		if doc.ResourceType == resourceTypeFlow && outcome.Status == statusSuccess && originalFlowID != "" &&
@@ -381,15 +439,77 @@ func (s *importService) ImportResources(
 		}
 	}
 
+	// Deletions run after the upserts so that resources moved or replaced by this same request are in
+	// place before their predecessors are pruned.
+	deleted := 0
+	if len(request.Deletions) > 0 && (failed == 0 || options.IsContinueOnErrorEnabled()) {
+		deleteOutcomes, deleteCount, deleteFailures := s.deleteResources(ctx, request.Deletions, options,
+			request.DryRun)
+		results = append(results, deleteOutcomes...)
+		deleted = deleteCount
+		failed += deleteFailures
+	}
+
 	return &ImportResponse{
 		Summary: &ImportSummary{
 			TotalDocuments: len(docs),
 			Imported:       imported,
+			Deleted:        deleted,
 			Failed:         failed,
 			ImportedAt:     time.Now().UTC(),
 		},
 		Results: results,
 	}, nil
+}
+
+// resolveReferences replaces the var: and sec: references in a document with the values this
+// deployment holds, before the document is imported. The service writing the resource then stores each
+// value as it stores any other.
+//
+// A document whose references the store does not all hold is refused, naming them, rather than written
+// with the reference text where a value belongs: a client secret stored as "sec:NAME" would reject
+// every authentication, for a reason that no longer mentions the name.
+//
+// A document that refers to a secret from a field that is not a credential is refused too, before
+// the store is read: resolved there, the secret would be stored as an ordinary value and could be
+// read back by whoever wrote the document.
+func (s *importService) resolveReferences(ctx context.Context, doc parsedDocument) (ImportItemOutcome, bool) {
+	if s.references == nil {
+		return ImportItemOutcome{}, true
+	}
+	err := s.references.ResolveDocument(ctx, doc.ResourceType, doc.Node)
+	if err == nil {
+		return ImportItemOutcome{}, true
+	}
+	outcome := ImportItemOutcome{
+		ResourceType: doc.ResourceType,
+		ResourceName: documentName(doc),
+		Status:       statusFailed,
+		Code:         ErrorUnresolvedReference.Code,
+		Message:      err.Error(),
+	}
+	var misplaced *secretresolver.MisplacedSecretError
+	if errors.As(err, &misplaced) {
+		outcome.Code = ErrorMisplacedSecret.Code
+		return outcome, false
+	}
+	var unresolved *secretresolver.UnresolvedError
+	if !errors.As(err, &unresolved) {
+		log.GetLogger().Error(ctx, "Failed to resolve the references in an imported document", log.Error(err))
+		outcome.Message = "the values this resource refers to could not be read"
+	}
+	return outcome, false
+}
+
+// documentName reads a document's top-level name, for naming it in an outcome before it is decoded.
+func documentName(doc parsedDocument) string {
+	var named struct {
+		Name string `yaml:"name"`
+	}
+	if doc.Node == nil || doc.Node.Decode(&named) != nil {
+		return ""
+	}
+	return named.Name
 }
 
 func (s *importService) DeleteResource(
@@ -457,6 +577,10 @@ func (s *importService) importDocument(
 		return s.importCredentialConfiguration(ctx, doc, options, dryRun)
 	case resourceTypeServerConfig:
 		return s.importServerConfig(ctx, doc, dryRun)
+	case resourceTypeGateway:
+		return s.importGateway(ctx, doc, options, dryRun)
+	case resourceTypeNotificationTemplate:
+		return s.importNotificationTemplate(ctx, doc, options, dryRun)
 	default:
 		return ImportItemOutcome{
 			ResourceType: doc.ResourceType,
@@ -852,6 +976,9 @@ func (s *importService) importFlow(
 }
 
 var resourceDependencyOrder = []string{
+	// A gateway refers to no other resource and nothing refers to it, so its position is free.
+	// First keeps it out of the way of the ordering that does matter.
+	resourceTypeGateway,
 	resourceTypeOrganizationUnit,
 	resourceTypeEntityType,
 	resourceTypeAgentType,
@@ -953,6 +1080,16 @@ func (s *importService) importApplication(
 	if options.IsUpsertEnabled() && req.ID != "" {
 		updated, svcErr := s.applicationService.UpdateApplication(ctx, req.ID, appDTO)
 		if svcErr == nil {
+			stored, getErr := s.applicationService.GetApplication(ctx, updated.ID)
+			if getErr != nil {
+				return serviceErrorOutcome(resourceTypeApplication, updated.ID, updated.Name,
+					operationUpdate, getErr)
+			}
+			if outcome := s.applySharingPolicies(ctx, application.ApplicationSharingType,
+				resourceTypeApplication, updated.ID, updated.Name, stored.OUID,
+				req.SharingPolicies, operationUpdate); outcome != nil {
+				return *outcome
+			}
 			return ImportItemOutcome{
 				ResourceType: resourceTypeApplication,
 				ResourceID:   updated.ID,
@@ -1021,6 +1158,20 @@ func (s *importService) importApplication(
 		}
 	}
 
+	// The policies come after the application exists, because a policy names the resource it
+	// governs. A refusal therefore has to undo the create: the caller is told the document failed
+	// and gets no id back, so an application left behind would hold the name and client id a retry
+	// needs.
+	if outcome := s.applySharingPolicies(ctx, application.ApplicationSharingType,
+		resourceTypeApplication, created.ID, created.Name, created.OUID,
+		req.SharingPolicies, operationCreate); outcome != nil {
+		if delErr := s.applicationService.DeleteApplication(ctx, created.ID); delErr != nil {
+			log.GetLogger().Error(ctx, "Failed to remove an application whose sharing policies were refused",
+				log.String("appID", created.ID), log.String("code", delErr.Code))
+		}
+		return *outcome
+	}
+
 	return ImportItemOutcome{
 		ResourceType: resourceTypeApplication,
 		ResourceID:   created.ID,
@@ -1081,6 +1232,7 @@ func applicationRequestToDTO(req *appmodel.ApplicationRequestWithID) *appmodel.A
 					ClientSecret:                       config.OAuthConfig.ClientSecret,
 					RedirectURIs:                       config.OAuthConfig.RedirectURIs,
 					PostLogoutRedirectURIs:             config.OAuthConfig.PostLogoutRedirectURIs,
+					BackchannelLogoutURI:               config.OAuthConfig.BackchannelLogoutURI,
 					GrantTypes:                         config.OAuthConfig.GrantTypes,
 					ResponseTypes:                      config.OAuthConfig.ResponseTypes,
 					TokenEndpointAuthMethod:            config.OAuthConfig.TokenEndpointAuthMethod,
@@ -1089,6 +1241,7 @@ func applicationRequestToDTO(req *appmodel.ApplicationRequestWithID) *appmodel.A
 					RequirePushedAuthorizationRequests: config.OAuthConfig.RequirePushedAuthorizationRequests,
 					DPoPBoundAccessTokens:              config.OAuthConfig.DPoPBoundAccessTokens,
 					IncludeActClaim:                    config.OAuthConfig.IncludeActClaim,
+					ClientIDMetadataDocument:           config.OAuthConfig.ClientIDMetadataDocument,
 					Token:                              config.OAuthConfig.Token,
 					Scopes:                             config.OAuthConfig.Scopes,
 					UserInfo:                           config.OAuthConfig.UserInfo,

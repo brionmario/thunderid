@@ -8,6 +8,7 @@ package model
 
 import (
 	inboundmodel "github.com/thunder-id/thunderid/internal/inboundclient/model"
+	"github.com/thunder-id/thunderid/internal/sharing"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 )
 
@@ -31,6 +32,8 @@ type ApplicationDTO struct {
 	providers.InboundAuthProfile
 	InboundAuthConfig []providers.InboundAuthConfigWithSecret `json:"inboundAuthConfig,omitempty" jsonschema:"OAuth/OIDC authentication configuration. Required for OAuth-enabled applications. Configure OAuth grant types, redirect URIs, and client authentication methods."`
 	Metadata          map[string]interface{}                  `json:"metadata,omitempty" jsonschema:"Generic metadata. Optional arbitrary key-value pairs for consumer use."`
+
+	SharingPolicies []sharing.PolicyRequest `json:"-"`
 }
 
 // BasicApplicationDTO represents a simplified data transfer object for application service operations.
@@ -113,6 +116,7 @@ type ApplicationRequestWithID struct {
 
 	InboundAuthConfig []providers.InboundAuthConfigWithSecret `json:"inboundAuthConfig,omitempty" yaml:"inboundAuthConfig,omitempty"`
 	Metadata          map[string]interface{}                  `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	SharingPolicies   []sharing.PolicyRequest                 `json:"sharingPolicies,omitempty" yaml:"sharingPolicies,omitempty"`
 }
 
 // ApplicationCompleteResponse represents the complete response structure for an application.
@@ -186,4 +190,57 @@ type ApplicationListResponse struct {
 	TotalResults int                        `json:"totalResults"`
 	Count        int                        `json:"count"`
 	Applications []BasicApplicationResponse `json:"applications"`
+}
+
+// SharingPolicyRequest is a sharing policy as this API creates one, which is narrower than what
+// the framework can hold. It carries no policy id and no terms: the id is the framework's to mint
+// on an interactive create, and an application declares no overlay fields for terms to govern.
+// Declaring either here would accept bodies the published schema refuses.
+type SharingPolicyRequest struct {
+	InitiatingOUID string `json:"initiatingOuId,omitempty"`
+	SharingPolicyUpdateRequest
+}
+
+// SharingPolicyUpdateRequest is an edit of a sharing policy: its sections and the version being
+// edited. Whose decision the policy is cannot change, since that would be another policy, so an
+// edit does not carry it.
+type SharingPolicyUpdateRequest struct {
+	AllUnits       *SharingAllUnitsRequest       `json:"allUnits,omitempty"`
+	ChildUnits     *SharingChildUnitsRequest     `json:"childUnits,omitempty"`
+	OtherTreeRoots *SharingOtherTreeRootsRequest `json:"otherTreeRoots,omitempty"`
+	Version        int                           `json:"version,omitempty"`
+}
+
+// SharingAllUnitsRequest is the section reaching every organization unit. A create may not state
+// it; an edit restates it to rewrite the exclusions of a policy that already holds it.
+type SharingAllUnitsRequest struct {
+	ExcludedOUIDs []string `json:"excludedOuIds,omitempty"`
+}
+
+// SharingChildUnitsRequest is the section about the organization units beneath the issuer, with
+// the fields the schema lists.
+type SharingChildUnitsRequest struct {
+	Mode          string                    `json:"mode"`
+	ExcludedOUIDs []string                  `json:"excludedOuIds,omitempty"`
+	Units         []SharingChildUnitRequest `json:"units,omitempty"`
+}
+
+// SharingChildUnitRequest names one direct child of the issuer and how far the application
+// carries from it.
+type SharingChildUnitRequest struct {
+	OUID  string `json:"ouId"`
+	Reach string `json:"reach"`
+}
+
+// SharingOtherTreeRootsRequest is the section about the root organization units of other trees,
+// with the fields the schema lists.
+type SharingOtherTreeRootsRequest struct {
+	Mode          string                   `json:"mode"`
+	ExcludedOUIDs []string                 `json:"excludedOuIds,omitempty"`
+	Units         []SharingRootUnitRequest `json:"units,omitempty"`
+}
+
+// SharingRootUnitRequest names the root organization unit of one other tree.
+type SharingRootUnitRequest struct {
+	OUID string `json:"ouId"`
 }

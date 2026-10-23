@@ -10,16 +10,19 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"reflect"
 	"sort"
 	"strings"
 
 	tidcommon "github.com/thunder-id/thunderid/pkg/thunderidengine/common"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 
+	authnprovidercm "github.com/thunder-id/thunderid/internal/authnprovider/common"
 	"github.com/thunder-id/thunderid/internal/entity"
 	"github.com/thunder-id/thunderid/internal/entitytype"
 	oupkg "github.com/thunder-id/thunderid/internal/ou"
 	serverconst "github.com/thunder-id/thunderid/internal/system/constants"
+	declarativeresource "github.com/thunder-id/thunderid/internal/system/declarative_resource"
 	"github.com/thunder-id/thunderid/internal/system/log"
 	"github.com/thunder-id/thunderid/internal/system/resourcedependency"
 	"github.com/thunder-id/thunderid/internal/system/security"
@@ -63,6 +66,7 @@ type userService struct {
 	entityTypeService  entitytype.EntityTypeServiceInterface
 	uuidGenerator      func() (string, error)
 	dependencyRegistry resourcedependency.Registry
+	valueCapturer      declarativeresource.ValueCapturer
 }
 
 // newUserService creates a new instance of userService with injected dependencies.
@@ -71,6 +75,7 @@ func newUserService(
 	entityService entity.EntityServiceInterface,
 	ouService oupkg.OrganizationUnitServiceInterface,
 	entityTypeService entitytype.EntityTypeServiceInterface,
+	valueCapturer declarativeresource.ValueCapturer,
 ) UserServiceInterface {
 	return &userService{
 		authzService:      authzService,
@@ -78,6 +83,7 @@ func newUserService(
 		ouService:         ouService,
 		entityTypeService: entityTypeService,
 		uuidGenerator:     utils.GenerateUUIDv7,
+		valueCapturer:     valueCapturer,
 	}
 }
 
@@ -262,7 +268,8 @@ func (us *userService) GetUsersByPath(
 			for _, u := range fetchedUsers {
 				userTypes = append(userTypes, u.Type)
 			}
-			displayAttrPaths := ResolveDisplayAttributePaths(ctx, userTypes, us.entityTypeService, logger)
+			displayAttrPaths := entitytype.ResolveDisplayAttributePaths(
+				ctx, entitytype.TypeCategoryUser, userTypes, us.entityTypeService, logger)
 
 			users = make([]providers.User, len(ouResponse.Users))
 			for i, ouUser := range ouResponse.Users {
@@ -305,6 +312,9 @@ func (us *userService) CreateUser(
 	if user == nil {
 		return nil, &ErrorInvalidRequestFormat
 	}
+	if user.LinkedAccount != nil && (user.LinkedAccount.IdpID == "" || user.LinkedAccount.Sub == "") {
+		return nil, &ErrorInvalidRequestFormat
+	}
 
 	// Check if caller is authorized to create users in the target OU.
 	if svcErr := us.checkUserAccess(ctx, security.ActionCreateUser, user.OUID, ""); svcErr != nil {
@@ -327,7 +337,8 @@ func (us *userService) CreateUser(
 	}
 
 	e := userToEntity(user)
-	created, err := us.entityService.CreateEntity(ctx, e, nil)
+	submitted := user.Attributes
+	created, err := us.entityService.CreateEntity(ctx, e, nil, user.LinkedAccount)
 	if err != nil {
 		if svcErr := mapEntityError(err); svcErr != nil {
 			return nil, svcErr
@@ -337,6 +348,7 @@ func (us *userService) CreateUser(
 
 	// Sync cleaned attributes back — entity service removed credential fields from Attributes.
 	user.Attributes = created.Attributes
+	us.captureSubmittedCredentials(ctx, user, submitted)
 
 	logger.Debug(ctx, "Successfully created user", log.MaskedString(log.LoggerKeyUserID, user.ID))
 	return user, nil
@@ -409,8 +421,8 @@ func (us *userService) GetUser(
 	}
 
 	if includeDisplay {
-		displayAttrPaths := ResolveDisplayAttributePaths(
-			ctx, []string{user.Type}, us.entityTypeService, logger)
+		displayAttrPaths := entitytype.ResolveDisplayAttributePaths(
+			ctx, entitytype.TypeCategoryUser, []string{user.Type}, us.entityTypeService, logger)
 		user.Display = utils.ResolveDisplay(
 			user.ID, user.Type, user.Attributes, displayAttrPaths)
 
@@ -673,6 +685,11 @@ func (us *userService) UpdateUserAttributes(
 		return nil, svcErr
 	}
 
+	attributes, svcErr = keepLegacySubject(existingUser.Attributes, attributes)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+
 	existingUser.Attributes = attributes
 
 	if err := us.entityService.UpdateAttributes(ctx, userID, attributes); err != nil {
@@ -779,6 +796,7 @@ func (us *userService) UpdateUserCredentials(
 	logger.Debug(ctx, "Successfully updated user credentials",
 		log.MaskedString(log.LoggerKeyUserID, userID),
 		log.Int("credentialTypesCount", len(credentialsMap)))
+	us.captureCredentials(ctx, &existingUser, existingUser.Attributes, plaintextCreds)
 	return nil
 }
 
@@ -990,8 +1008,8 @@ func (us *userService) populateUserDisplayNames(ctx context.Context, users []pro
 		userTypes = append(userTypes, u.Type)
 	}
 
-	displayAttrPaths := ResolveDisplayAttributePaths(
-		ctx, userTypes, us.entityTypeService, logger)
+	displayAttrPaths := entitytype.ResolveDisplayAttributePaths(
+		ctx, entitytype.TypeCategoryUser, userTypes, us.entityTypeService, logger)
 
 	// Resolve display for each user.
 	for i := range users {
@@ -1064,7 +1082,7 @@ func (us *userService) validateOrganizationUnitForUserType(
 		return &tidcommon.InternalServerError
 	}
 
-	entityType, svcErr := us.entityTypeService.GetEntityTypeByName(ctx,
+	entityType, svcErr := us.entityTypeService.GetEntityTypeByHandle(ctx,
 		entitytype.TypeCategoryUser, userType)
 	if svcErr != nil {
 		if svcErr.Code == entitytype.ErrorEntityTypeNotFound.Code {
@@ -1272,4 +1290,45 @@ func (us *userService) ResolveUserOUHandle(
 		user.OUID = ou.ID
 	}
 	return nil
+}
+
+// keepLegacySubject carries the stored sub over unchanged and rejects a request that changes it.
+// A federated sign-in migrates the user holding a matching sub to a recorded link, so a user who
+// sets their own sub could capture someone else's first sign-in, and the full replace this update
+// performs would otherwise drop the value a legacy user needs to be migrated.
+func keepLegacySubject(stored, requested json.RawMessage) (json.RawMessage, *tidcommon.ServiceError) {
+	var requestedAttrs map[string]json.RawMessage
+	if err := json.Unmarshal(requested, &requestedAttrs); err != nil {
+		return nil, &ErrorInvalidRequestFormat
+	}
+	storedAttrs := map[string]json.RawMessage{}
+	if len(stored) > 0 {
+		if err := json.Unmarshal(stored, &storedAttrs); err != nil {
+			return nil, &tidcommon.InternalServerError
+		}
+	}
+
+	storedSub, hasStored := storedAttrs[authnprovidercm.UserAttributeSub]
+	requestedSub, hasRequested := requestedAttrs[authnprovidercm.UserAttributeSub]
+	switch {
+	case hasRequested && (!hasStored || !sameJSONValue(storedSub, requestedSub)):
+		return nil, &ErrorInvalidRequestFormat
+	case !hasRequested && hasStored:
+		requestedAttrs[authnprovidercm.UserAttributeSub] = storedSub
+		merged, err := json.Marshal(requestedAttrs)
+		if err != nil {
+			return nil, &tidcommon.InternalServerError
+		}
+		return merged, nil
+	}
+	return requested, nil
+}
+
+// sameJSONValue reports whether two JSON documents hold the same value, ignoring formatting.
+func sameJSONValue(a, b json.RawMessage) bool {
+	var av, bv interface{}
+	if json.Unmarshal(a, &av) != nil || json.Unmarshal(b, &bv) != nil {
+		return false
+	}
+	return reflect.DeepEqual(av, bv)
 }

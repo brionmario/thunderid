@@ -8,8 +8,8 @@ import (
 	"context"
 
 	mock "github.com/stretchr/testify/mock"
+	"github.com/thunder-id/thunderid/internal/ou"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/common"
-	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 )
 
 // newOuProviderMock creates a new instance of ouProviderMock. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -18,10 +18,19 @@ func newOuProviderMock(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *ouProviderMock {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &ouProviderMock{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -40,22 +49,22 @@ func (_m *ouProviderMock) EXPECT() *ouProviderMock_Expecter {
 }
 
 // GetOrganizationUnit provides a mock function for the type ouProviderMock
-func (_mock *ouProviderMock) GetOrganizationUnit(ctx context.Context, id string) (providers.OrganizationUnit, *common.ServiceError) {
+func (_mock *ouProviderMock) GetOrganizationUnit(ctx context.Context, id string) (ou.OrganizationUnit, *common.ServiceError) {
 	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetOrganizationUnit")
 	}
 
-	var r0 providers.OrganizationUnit
+	var r0 ou.OrganizationUnit
 	var r1 *common.ServiceError
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (providers.OrganizationUnit, *common.ServiceError)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (ou.OrganizationUnit, *common.ServiceError)); ok {
 		return returnFunc(ctx, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) providers.OrganizationUnit); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ou.OrganizationUnit); ok {
 		r0 = returnFunc(ctx, id)
 	} else {
-		r0 = ret.Get(0).(providers.OrganizationUnit)
+		r0 = ret.Get(0).(ou.OrganizationUnit)
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) *common.ServiceError); ok {
 		r1 = returnFunc(ctx, id)
@@ -75,7 +84,7 @@ type ouProviderMock_GetOrganizationUnit_Call struct {
 // GetOrganizationUnit is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id string
-func (_e *ouProviderMock_Expecter) GetOrganizationUnit(ctx interface{}, id interface{}) *ouProviderMock_GetOrganizationUnit_Call {
+func (_e *ouProviderMock_Expecter) GetOrganizationUnit(ctx any, id any) *ouProviderMock_GetOrganizationUnit_Call {
 	return &ouProviderMock_GetOrganizationUnit_Call{Call: _e.mock.On("GetOrganizationUnit", ctx, id)}
 }
 
@@ -97,12 +106,12 @@ func (_c *ouProviderMock_GetOrganizationUnit_Call) Run(run func(ctx context.Cont
 	return _c
 }
 
-func (_c *ouProviderMock_GetOrganizationUnit_Call) Return(organizationUnit providers.OrganizationUnit, serviceError *common.ServiceError) *ouProviderMock_GetOrganizationUnit_Call {
+func (_c *ouProviderMock_GetOrganizationUnit_Call) Return(organizationUnit ou.OrganizationUnit, serviceError *common.ServiceError) *ouProviderMock_GetOrganizationUnit_Call {
 	_c.Call.Return(organizationUnit, serviceError)
 	return _c
 }
 
-func (_c *ouProviderMock_GetOrganizationUnit_Call) RunAndReturn(run func(ctx context.Context, id string) (providers.OrganizationUnit, *common.ServiceError)) *ouProviderMock_GetOrganizationUnit_Call {
+func (_c *ouProviderMock_GetOrganizationUnit_Call) RunAndReturn(run func(ctx context.Context, id string) (ou.OrganizationUnit, *common.ServiceError)) *ouProviderMock_GetOrganizationUnit_Call {
 	_c.Call.Return(run)
 	return _c
 }

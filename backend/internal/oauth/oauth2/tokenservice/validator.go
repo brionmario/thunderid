@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/thunder-id/thunderid/internal/idp"
@@ -52,8 +53,9 @@ type TokenValidatorInterface interface {
 	// refresh token into an ID-JAG.
 	ValidateIDJAGSubjectToken(ctx context.Context, token string, oauthApp *providers.OAuthClient) (
 		*SubjectTokenClaims, error)
-	// ValidateIDJAGAssertion validates an ID-JAG assertion presented on the jwt-bearer grant.
-	ValidateIDJAGAssertion(ctx context.Context, assertion string) (*IDJAGAssertionClaims, error)
+	// ValidateIDJAGAssertion validates an ID-JAG assertion presented on the jwt-bearer grant,
+	// binding it to the authenticated client via its client_id claim.
+	ValidateIDJAGAssertion(ctx context.Context, assertion, clientID string) (*IDJAGAssertionClaims, error)
 }
 
 // TokenValidator implements TokenValidatorInterface.
@@ -131,7 +133,7 @@ func (tv *tokenValidator) ValidateAccessToken(ctx context.Context, token string)
 
 	jti, _ := extractStringClaim(claims, constants.ClaimJTI)
 	tokenFamilyID, _ := extractStringClaim(claims, constants.ClaimTokenFamilyID)
-	if err := tv.ensureNotRevoked(ctx, revocationIdentity(claims, jti, tokenFamilyID)); err != nil {
+	if err := tv.ensureNotRevoked(ctx, claims, jti, tokenFamilyID); err != nil {
 		return nil, err
 	}
 
@@ -154,19 +156,25 @@ func (tv *tokenValidator) ValidateRefreshToken(
 		return nil, fmt.Errorf("invalid refresh token: %v", err.Error)
 	}
 
+	header, err := jwt.DecodeJWTHeader(token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode refresh token header: %w", err)
+	}
+
 	claims, err := jwt.DecodeJWTPayload(token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode refresh token: %w", err)
 	}
 
-	clientID, err := tv.validateOAuth2RefreshClaims(claims)
+	typ, _ := header["typ"].(string)
+	clientID, err := tv.validateOAuth2RefreshClaims(typ, claims)
 	if err != nil {
 		return nil, err
 	}
 
 	// Extract claims
 	sub, _ := extractStringClaim(claims, "access_token_sub")
-	audiences := extractStringSliceClaim(claims, "access_token_aud")
+	audiences := extractStringSliceClaim(claims, constants.ClaimAccessTokenAudience)
 	grantType, _ := extractStringClaim(claims, "grant_type")
 	iat, _ := extractInt64Claim(claims, "iat")
 	exp, _ := extractInt64Claim(claims, "exp")
@@ -200,7 +208,7 @@ func (tv *tokenValidator) ValidateRefreshToken(
 		dpopJkt = s
 	}
 
-	if err := tv.ensureNotRevoked(ctx, revocationIdentity(claims, jti, tokenFamilyID)); err != nil {
+	if err := tv.ensureNotRevoked(ctx, claims, jti, tokenFamilyID); err != nil {
 		return nil, err
 	}
 
@@ -280,15 +288,11 @@ func (tv *tokenValidator) validateExchangeToken(
 	token string,
 	oauthApp *providers.OAuthClient,
 ) (*SubjectTokenClaims, map[string]interface{}, error) {
-	// An ID-JAG is an authorization grant, not a subject token, and must never be redeemable on token
-	// exchange. Reject it up front based on its typ header before any other processing.
 	header, err := jwt.DecodeJWTHeader(token)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode token header: %w", err)
 	}
-	if typ, _ := header["typ"].(string); typ == jwt.TokenTypeIDJAG {
-		return nil, nil, fmt.Errorf("an ID-JAG cannot be presented as a subject_token")
-	}
+	typ, _ := header["typ"].(string)
 
 	claims, err := jwt.DecodeJWTPayload(token)
 	if err != nil {
@@ -300,8 +304,21 @@ func (tv *tokenValidator) validateExchangeToken(
 		return nil, nil, fmt.Errorf("subject token is missing 'iss' claim: %w", err)
 	}
 
+	// Refuse a token whose type can never be exchanged, before doing any signature work.
+	selfIssued := tv.isSelfIssuer(iss)
+	if !isExchangeableType(typ, selfIssued) {
+		return nil, nil, fmt.Errorf("a token of type %q cannot be presented as a subject_token", typ)
+	}
+
 	// Try the server's own issuer first.
-	if tv.isSelfIssuer(iss) {
+	if selfIssued {
+		// Refresh tokens minted before rt+jwt carry the generic type; access_token_sub identifies them.
+		// TODO: Remove on the next major version, once no pre-rt+jwt refresh token can still be valid.
+		if _, isLegacyRefresh := claims[constants.ClaimAccessTokenSubject]; isLegacyRefresh &&
+			jwt.IsLegacyRefreshTokenType(typ) {
+			return nil, nil, fmt.Errorf("a refresh token cannot be presented as a subject_token")
+		}
+
 		if err := tv.verifyTokenSignatureByIssuer(ctx, token, iss); err != nil {
 			return nil, nil, fmt.Errorf("invalid subject token signature: %w", err)
 		}
@@ -310,7 +327,7 @@ func (tv *tokenValidator) validateExchangeToken(
 			return nil, nil, err
 		}
 		selfTokenFamilyID, _ := extractStringClaim(claims, constants.ClaimTokenFamilyID)
-		if err := tv.ensureNotRevoked(ctx, revocationIdentity(claims, selfClaims.JTI, selfTokenFamilyID)); err != nil {
+		if err := tv.ensureNotRevoked(ctx, claims, selfClaims.JTI, selfTokenFamilyID); err != nil {
 			return nil, nil, err
 		}
 		return selfClaims, claims, nil
@@ -376,6 +393,9 @@ func (tv *tokenValidator) ValidateIDJAGSubjectToken(
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode subject token payload: %w", err)
 	}
+	// An rt+jwt refresh token is already refused by the typ check above. This catches the ones minted
+	// before rt+jwt existed, which share the generic type with ID tokens.
+	// TODO: Remove on the next major version, once no pre-rt+jwt refresh token can still be valid.
 	if _, isRefreshToken := claims["access_token_sub"]; isRefreshToken {
 		return nil, fmt.Errorf("subject_token must be an ID token, not a refresh token")
 	}
@@ -394,11 +414,12 @@ func (tv *tokenValidator) ValidateIDJAGSubjectToken(
 // ValidateIDJAGAssertion validates an ID-JAG assertion presented on the jwt-bearer grant
 // (draft-ietf-oauth-identity-assertion-authz-grant). It requires the oauth-id-jag+jwt typ header,
 // resolves the assertion's issuer to a trusted external IdP with ID-JAG enabled, verifies the
-// signature against that IdP's JWKS, validates the time claims, and requires the audience to equal
-// this server's issuer.
+// signature against that IdP's JWKS, validates the time claims, requires the audience to equal this
+// server's issuer, and binds the assertion to the authenticated client via the client_id claim.
 func (tv *tokenValidator) ValidateIDJAGAssertion(
 	ctx context.Context,
 	assertion string,
+	clientID string,
 ) (*IDJAGAssertionClaims, error) {
 	header, err := jwt.DecodeJWTHeader(assertion)
 	if err != nil {
@@ -461,8 +482,12 @@ func (tv *tokenValidator) ValidateIDJAGAssertion(
 			ErrAudienceNotAccepted, serverIssuer)
 	}
 
-	if _, err := extractStringClaim(claims, "client_id"); err != nil {
+	assertionClientID, err := extractStringClaim(claims, "client_id")
+	if err != nil {
 		return nil, fmt.Errorf("assertion is missing 'client_id' claim: %w", err)
+	}
+	if assertionClientID != clientID {
+		return nil, fmt.Errorf("assertion 'client_id' does not match the authenticated client")
 	}
 
 	sub, err := extractStringClaim(claims, "sub")
@@ -749,7 +774,13 @@ func (tv *tokenValidator) validateTimeClaims(claims map[string]interface{}) erro
 // validateOAuth2RefreshClaims validates OAuth2-specific refresh token claims.
 // validateOAuth2RefreshClaims asserts the claim shape unique to a refresh token and returns the client
 // the token was issued to.
-func (tv *tokenValidator) validateOAuth2RefreshClaims(claims map[string]interface{}) (string, error) {
+func (tv *tokenValidator) validateOAuth2RefreshClaims(typ string, claims map[string]interface{}) (string, error) {
+	// A refresh token must be typed rt+jwt, or carry the generic type it was minted with before
+	// rt+jwt existed. The claim checks below settle the legacy case: only a refresh token has them.
+	if !jwt.IsRefreshTokenType(typ) && !jwt.IsLegacyRefreshTokenType(typ) {
+		return "", fmt.Errorf("token is not a refresh token (unexpected typ header %q)", typ)
+	}
+
 	clientID, err := extractStringClaim(claims, "sub")
 	if err != nil {
 		return "", fmt.Errorf("missing or invalid 'sub' claim: %w", err)
@@ -760,7 +791,7 @@ func (tv *tokenValidator) validateOAuth2RefreshClaims(claims map[string]interfac
 		return "", fmt.Errorf("missing or invalid 'access_token_sub' claim: %w", err)
 	}
 
-	if auds := extractStringSliceClaim(claims, "access_token_aud"); len(auds) == 0 {
+	if auds := extractStringSliceClaim(claims, constants.ClaimAccessTokenAudience); len(auds) == 0 {
 		return "", fmt.Errorf("missing or invalid 'access_token_aud' claim")
 	}
 
@@ -796,9 +827,13 @@ func (tv *tokenValidator) isAuthAssertion(
 	return false
 }
 
-// ensureNotRevoked delegates the final token validation step to the configured enforcement service.
-func (tv *tokenValidator) ensureNotRevoked(ctx context.Context,
-	identity revocation.RevocationIdentity) error {
+// ensureNotRevoked checks the token's revocation identity with the configured enforcement service.
+func (tv *tokenValidator) ensureNotRevoked(ctx context.Context, claims map[string]interface{},
+	jti, tokenFamilyID string) error {
+	identity, err := revocationIdentity(claims, jti, tokenFamilyID)
+	if err != nil {
+		return err
+	}
 	if tv.enforcementService != nil {
 		return tv.enforcementService.EnsureNotRevoked(ctx, identity)
 	}
@@ -807,13 +842,14 @@ func (tv *tokenValidator) ensureNotRevoked(ctx context.Context,
 
 // revocationIdentity extracts the trusted token attributes used by criteria enforcement.
 //
-// Only the dimensions a writer actually records are enforced here: the token family, the subject, and
-// the OAuth client the artifact was issued to. The remaining criterion types the revocation service
-// accepts have no writer yet, and adding them speculatively would widen the deny-list query on every
-// token validation for rows that cannot exist. Extend this alongside the write path, not ahead of it,
-// and keep it in step with the Resource Server cache so both enforcement points cover the same
-// dimensions.
-func revocationIdentity(claims map[string]interface{}, jti, tokenFamilyID string) revocation.RevocationIdentity {
+// Only the dimensions a writer actually records are enforced here: the token family, the subject, the
+// OAuth client the artifact was issued to, and the scopes it carries. The remaining criterion types
+// the revocation service accepts have no writer yet, and adding them speculatively would widen the
+// deny-list query on every token validation for rows that cannot exist. Extend this alongside the
+// write path, not ahead of it, and keep it in step with the Resource Server cache so both enforcement
+// points cover the same dimensions.
+func revocationIdentity(claims map[string]interface{}, jti, tokenFamilyID string) (
+	revocation.RevocationIdentity, error) {
 	criteria := make([]revocation.Criterion, 0, 3)
 	if tokenFamilyID != "" {
 		criteria = append(criteria,
@@ -832,12 +868,19 @@ func revocationIdentity(claims map[string]interface{}, jti, tokenFamilyID string
 		criteria = append(criteria,
 			revocation.Criterion{Type: revocation.CriterionTypeApplicationKey, Value: clientKey})
 	}
+	rawScope, _ := extractStringClaim(claims, constants.ClaimScope)
+	scopes := strings.Fields(rawScope)
+	audiences, err := revocation.TokenAudiences(claims, scopes)
+	if err != nil {
+		return revocation.RevocationIdentity{}, fmt.Errorf("invalid audience claim: %w", err)
+	}
+	criteria = append(criteria, revocation.ScopeCriteria(subject, audiences, scopes)...)
 
 	var establishedAt time.Time
 	if issuedAt, ok := claims[constants.ClaimIat].(float64); ok {
 		establishedAt = time.Unix(int64(issuedAt), 0).UTC()
 	}
-	return revocation.RevocationIdentity{JTI: jti, EstablishedAt: establishedAt, Criteria: criteria}
+	return revocation.RevocationIdentity{JTI: jti, EstablishedAt: establishedAt, Criteria: criteria}, nil
 }
 
 // revocationClientKey returns the OAuth client the artifact was issued to, the value the app.key
@@ -852,4 +895,29 @@ func revocationClientKey(claims map[string]interface{}, isRefreshToken bool) str
 		return clientKey
 	}
 	return ""
+}
+
+// isExchangeableType reports whether a token with this typ header may be presented on token exchange.
+func isExchangeableType(typ string, selfIssued bool) bool {
+	// An ID-JAG is an authorization grant and a logout token is a notification. Neither is a subject
+	// token, whatever its issuer.
+	if typ == jwt.TokenTypeIDJAG || typ == jwt.TokenTypeLogout {
+		return false
+	}
+	if selfIssued {
+		return isExchangeableSelfIssuedType(typ)
+	}
+	// Beyond those two, another issuer's typ is not ours to interpret.
+	return true
+}
+
+// isExchangeableSelfIssuedType reports whether a token this server issued may be presented on token
+// exchange. It must carry the generic JWT type, which ID tokens use, or an access token type, so refresh
+// tokens and any token type added later are refused.
+func isExchangeableSelfIssuedType(typ string) bool {
+	switch typ {
+	case jwt.TokenTypeJWT, jwt.TokenTypeAccessToken, jwt.TokenTypeAccessTokenWithPrefix:
+		return true
+	}
+	return false
 }

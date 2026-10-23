@@ -41,8 +41,10 @@ const (
 	entityExportOUHandle = "export-entity-ou"
 
 	entityExportUserTypeName = "export-entity-person"
-	entityExportUsername     = "export-entity-user"
-	entityExportPassword     = "ExportEntity@123"
+
+	entityExportUserTypeDisplayName = "Export Entity Person"
+	entityExportUsername            = "export-entity-user"
+	entityExportPassword            = "ExportEntity@123"
 
 	// The agent type is the shared singleton `default`, so its name is fixed.
 	entityExportAgentTypeName = "default"
@@ -69,8 +71,9 @@ func (ts *ExportEntityResourcesTestSuite) SetupSuite() {
 	ts.ouID = ouID
 
 	userTypeID, err := testutils.CreateUserType(testutils.UserType{
-		Name: entityExportUserTypeName,
-		OUID: ts.ouID,
+		Handle:      entityExportUserTypeName,
+		DisplayName: entityExportUserTypeDisplayName,
+		OUID:        ts.ouID,
 		Schema: map[string]interface{}{
 			"username": map[string]interface{}{"type": "string"},
 			"password": map[string]interface{}{"type": "string", "credential": true},
@@ -88,8 +91,10 @@ func (ts *ExportEntityResourcesTestSuite) SetupSuite() {
 	ts.agentTypeSnapshot = snapshot
 
 	_, err = testutils.CreateAgentType(testutils.UserType{
-		OUID: ts.ouID,
+		DisplayName: "Default",
+		OUID:        ts.ouID,
 		Schema: map[string]interface{}{
+			"name":        map[string]interface{}{"type": "string", "required": true, "unique": true},
 			"description": map[string]interface{}{"type": "string"},
 		},
 	})
@@ -224,6 +229,49 @@ func (ts *ExportEntityResourcesTestSuite) TestUserExportParameterizesCredentials
 		"the credential must leave as a template variable")
 }
 
+// TestUserWithoutAPasswordIsExportedWithoutOne verifies a user who never set a password is still
+// exported, and carries no password variable. Exporting one anyway would demand a value on import
+// for a credential the user never had.
+func (ts *ExportEntityResourcesTestSuite) TestUserWithoutAPasswordIsExportedWithoutOne() {
+	userID, err := testutils.CreateUser(testutils.User{
+		Type:       entityExportUserTypeName,
+		OUID:       ts.ouID,
+		Attributes: json.RawMessage(`{"username": "export-entity-no-password", "email": "np@example.com"}`),
+	})
+	ts.Require().NoError(err, "Failed to create the user")
+	defer func() { _ = testutils.DeleteUser(userID) }()
+
+	yamlContent, err := ts.exportResourcesYAML(ExportRequest{Users: []string{userID}})
+	ts.Require().NoError(err)
+
+	ts.Assert().Contains(yamlContent, `username: "export-entity-no-password"`, "the user was not exported")
+	ts.Assert().NotContains(yamlContent, "USER_EXPORT_ENTITY_NO_PASSWORD_PASSWORD",
+		"a user without a password must not export a password variable")
+}
+
+// TestUserWithoutAUsernameIsLeftOut verifies a user with no username is left out of the export
+// rather than exported without one. Its credential placeholders are named after the username, so
+// there is nothing to name them after, and a user with no username cannot be identified on import.
+// The rest of the export still goes through.
+func (ts *ExportEntityResourcesTestSuite) TestUserWithoutAUsernameIsLeftOut() {
+	userID, err := testutils.CreateUser(testutils.User{
+		Type: entityExportUserTypeName,
+		OUID: ts.ouID,
+		Attributes: json.RawMessage(
+			`{"password": "ExportEntity@123", "email": "export-entity-nameless@example.com"}`),
+	})
+	ts.Require().NoError(err, "Failed to create the user")
+	defer func() { _ = testutils.DeleteUser(userID) }()
+
+	yamlContent, err := ts.exportResourcesYAML(ExportRequest{Users: []string{userID, ts.userID}})
+	ts.Require().NoError(err)
+
+	ts.Assert().Contains(yamlContent, `username: "`+entityExportUsername+`"`,
+		"the other user must still be exported")
+	ts.Assert().NotContains(yamlContent, "export-entity-nameless@example.com",
+		"a user without a username must not be exported")
+}
+
 // TestUserExportRefusesTwoUsersWithOneVariableName verifies an export that cannot represent both
 // users is refused rather than returned.
 //
@@ -284,7 +332,8 @@ func (ts *ExportEntityResourcesTestSuite) TestUserTypeExportByID() {
 	ts.Require().NotEmpty(yamlContent)
 
 	ts.Assert().Contains(yamlContent, "resource_type: user_type")
-	ts.Assert().Contains(yamlContent, "name: "+entityExportUserTypeName)
+	ts.Assert().Contains(yamlContent, "handle: "+entityExportUserTypeName)
+	ts.Assert().Contains(yamlContent, "displayName: "+entityExportUserTypeDisplayName)
 	ts.Assert().Contains(yamlContent, "username")
 	ts.Assert().Contains(yamlContent, "email")
 }
@@ -296,7 +345,7 @@ func (ts *ExportEntityResourcesTestSuite) TestUserTypeExportWithWildcard() {
 	ts.Require().NotEmpty(yamlContent)
 
 	ts.Assert().Contains(yamlContent, "resource_type: user_type")
-	ts.Assert().Contains(yamlContent, "name: "+entityExportUserTypeName)
+	ts.Assert().Contains(yamlContent, "handle: "+entityExportUserTypeName)
 }
 
 // TestAgentTypeExportWithWildcard verifies agent types export under their own resource type. The two
@@ -308,7 +357,8 @@ func (ts *ExportEntityResourcesTestSuite) TestAgentTypeExportWithWildcard() {
 	ts.Require().NotEmpty(yamlContent)
 
 	ts.Assert().Contains(yamlContent, "resource_type: agent_type")
-	ts.Assert().Contains(yamlContent, "name: "+entityExportAgentTypeName)
+	ts.Assert().Contains(yamlContent, "handle: "+entityExportAgentTypeName)
+	ts.Assert().Contains(yamlContent, "displayName: ")
 	ts.Assert().NotContains(yamlContent, "resource_type: user_type",
 		"an agent type export must not emit user_type documents")
 }

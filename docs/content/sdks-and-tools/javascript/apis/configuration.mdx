@@ -66,7 +66,8 @@ await client.initialize({
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `storage` | `T` | Platform default | Storage backend for session and config data. The accepted values depend on the platform SDK |
-| `syncSession` | `boolean` | `false` | Sync the application session with the IdP using OIDC iframe session management (RFC). May not work in browsers with third-party cookie restrictions |
+| `session.silentSignIn.beforeRedirect` | `boolean` | `false` | Browser SDKs only. Before `signIn()` redirects, try a silent `prompt=none` sign-in from the existing <ProductName /> session. When the session exists, the user is signed in without leaving the app. Otherwise the redirect continues. Skipped when the sign-in options set their own `prompt` |
+| `session.silentSignIn.timeout` | `number` | `10000` | How long, in milliseconds, a silent sign-in waits for a response before treating the user as signed out. Also applies to `signInSilently()` |
 | `instanceId` | `number` | `0` | Instance identifier for namespacing storage. Use when running multiple SDK instances |
 
 ### Discovery and Endpoint Parameters
@@ -86,11 +87,15 @@ By default the SDK fetches `{baseUrl}/.well-known/openid-configuration` to resol
 | `endpoints.flowExecute` | `string` | `{baseUrl}/flow/execute` | Override the flow execution endpoint (embedded sign-in, sign-up, recovery, and user onboarding flows) |
 | `endpoints.flowMeta` | `string` | `{baseUrl}/flow/meta` | Override the flow metadata endpoint |
 | `endpoints.usersMe` | `string` | `{baseUrl}/users/me` | Override the current-user profile endpoint |
+| `endpoints.applications` | `string` | `{baseUrl}/applications` | Override the applications collection used by the [management](../management) operations |
+| `endpoints.users` | `string` | `{baseUrl}/users` | Override the users collection used by the [management](../management) operations |
+| `endpoints.agents` | `string` | `{baseUrl}/agents` | Override the agents collection used by the [management](../management) operations |
 
 The `endpoints.authorization`, `endpoints.token`, `endpoints.userInfo`, `endpoints.jwks`, `endpoints.introspection`,
 and `endpoints.endSession` overrides address OIDC/OAuth endpoints, which are otherwise resolved from the discovery
-document. The `endpoints.flowExecute`, `endpoints.flowMeta`, and `endpoints.usersMe` overrides address resource-server
-endpoints, which are otherwise derived by concatenating `baseUrl` with a fixed path.
+document. The `endpoints.flowExecute`, `endpoints.flowMeta`, `endpoints.usersMe`, `endpoints.applications`,
+`endpoints.users`, and `endpoints.agents` overrides address resource-server endpoints, which are otherwise derived by
+concatenating `baseUrl` with a fixed path.
 
 Split these two groups when the OAuth authorization server and the <ProductName /> resource server are different hosts,
 for example when two <ProductName /> instances are connected as trusted issuers. Point `baseUrl` (and hence the

@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"strconv"
 
 	tidcommon "github.com/thunder-id/thunderid/pkg/thunderidengine/common"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
@@ -14,6 +16,8 @@ import (
 	inboundmodel "github.com/thunder-id/thunderid/internal/inboundclient/model"
 
 	"github.com/thunder-id/thunderid/internal/application/model"
+	"github.com/thunder-id/thunderid/internal/sharing"
+	serverconst "github.com/thunder-id/thunderid/internal/system/constants"
 	"github.com/thunder-id/thunderid/internal/system/error/apierror"
 	"github.com/thunder-id/thunderid/internal/system/log"
 	sysutils "github.com/thunder-id/thunderid/internal/system/utils"
@@ -154,7 +158,6 @@ func (ah *applicationHandler) HandleApplicationListRequest(w http.ResponseWriter
 // HandleApplicationGetRequest handles the application request.
 func (ah *applicationHandler) HandleApplicationGetRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, "ApplicationHandler"))
 
 	id := r.PathValue("id")
 	if id == "" {
@@ -168,12 +171,25 @@ func (ah *applicationHandler) HandleApplicationGetRequest(w http.ResponseWriter,
 	}
 
 	appDTO, svcErr := ah.service.GetApplication(ctx, id)
+	var returnApp *model.ApplicationGetResponse
+	if svcErr == nil {
+		returnApp, svcErr = toApplicationGetResponse(ctx, appDTO)
+	}
 	if svcErr != nil {
 		ah.handleError(ctx, w, r, svcErr)
 		return
 	}
 
-	returnApp := model.ApplicationGetResponse{
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, returnApp)
+}
+
+// toApplicationGetResponse builds what a read of the application returns. An application whose
+// inbound authentication is not OAuth, or has no OAuth configuration, cannot be shown.
+func toApplicationGetResponse(ctx context.Context, appDTO *providers.Application) (
+	*model.ApplicationGetResponse, *tidcommon.ServiceError) {
+	logger := log.GetLogger().With(log.String(log.LoggerKeyComponentName, "ApplicationHandler"))
+
+	returnApp := &model.ApplicationGetResponse{
 		ID:          appDTO.ID,
 		OUID:        appDTO.OUID,
 		Name:        appDTO.Name,
@@ -210,38 +226,20 @@ func (ah *applicationHandler) HandleApplicationGetRequest(w http.ResponseWriter,
 			logger.Error(ctx, "Unsupported inbound authentication type returned",
 				log.String("type", string(appDTO.InboundAuthConfig[0].Type)))
 
-			errResp := apierror.ErrorResponse{
-				Code:        tidcommon.InternalServerError.Code,
-				Message:     tidcommon.InternalServerError.Error,
-				Description: tidcommon.InternalServerError.ErrorDescription,
-			}
-			sysutils.WriteErrorResponse(ctx, w, http.StatusInternalServerError, errResp)
-			return
+			return nil, &tidcommon.InternalServerError
 		}
 
 		if appDTO.InboundAuthConfig[0].OAuthConfig == nil {
 			logger.Error(ctx, "OAuth application configuration is nil")
 
-			errResp := apierror.ErrorResponse{
-				Code:        tidcommon.InternalServerError.Code,
-				Message:     tidcommon.InternalServerError.Error,
-				Description: tidcommon.InternalServerError.ErrorDescription,
-			}
-			sysutils.WriteErrorResponse(ctx, w, http.StatusInternalServerError, errResp)
-			return
+			return nil, &tidcommon.InternalServerError
 		}
 
 		returnInboundAuthConfigs := make([]inboundmodel.InboundAuthConfig, 0, len(appDTO.InboundAuthConfig))
 		for _, config := range appDTO.InboundAuthConfig {
 			if config.OAuthConfig == nil {
 				logger.Error(ctx, "OAuth application configuration is nil")
-				errResp := apierror.ErrorResponse{
-					Code:        tidcommon.InternalServerError.Code,
-					Message:     tidcommon.InternalServerError.Error,
-					Description: tidcommon.InternalServerError.ErrorDescription,
-				}
-				sysutils.WriteErrorResponse(ctx, w, http.StatusInternalServerError, errResp)
-				return
+				return nil, &tidcommon.InternalServerError
 			}
 			redirectURIs := config.OAuthConfig.RedirectURIs
 			if len(redirectURIs) == 0 {
@@ -259,6 +257,7 @@ func (ah *applicationHandler) HandleApplicationGetRequest(w http.ResponseWriter,
 				ClientID:                           config.OAuthConfig.ClientID,
 				RedirectURIs:                       redirectURIs,
 				PostLogoutRedirectURIs:             config.OAuthConfig.PostLogoutRedirectURIs,
+				BackchannelLogoutURI:               config.OAuthConfig.BackchannelLogoutURI,
 				GrantTypes:                         grantTypes,
 				ResponseTypes:                      responseTypes,
 				TokenEndpointAuthMethod:            config.OAuthConfig.TokenEndpointAuthMethod,
@@ -267,6 +266,7 @@ func (ah *applicationHandler) HandleApplicationGetRequest(w http.ResponseWriter,
 				RequirePushedAuthorizationRequests: config.OAuthConfig.RequirePushedAuthorizationRequests,
 				DPoPBoundAccessTokens:              config.OAuthConfig.DPoPBoundAccessTokens,
 				IncludeActClaim:                    config.OAuthConfig.IncludeActClaim,
+				ClientIDMetadataDocument:           config.OAuthConfig.ClientIDMetadataDocument,
 				Token:                              config.OAuthConfig.Token,
 				Scopes:                             config.OAuthConfig.Scopes,
 				UserInfo:                           config.OAuthConfig.UserInfo,
@@ -283,7 +283,7 @@ func (ah *applicationHandler) HandleApplicationGetRequest(w http.ResponseWriter,
 		returnApp.ClientID = appDTO.InboundAuthConfig[0].OAuthConfig.ClientID
 	}
 
-	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, returnApp)
+	return returnApp, nil
 }
 
 // HandleApplicationPutRequest handles the application request.
@@ -469,6 +469,7 @@ func (ah *applicationHandler) processInboundAuthConfig(
 				ClientSecret:                       config.OAuthConfig.ClientSecret,
 				RedirectURIs:                       redirectURIs,
 				PostLogoutRedirectURIs:             config.OAuthConfig.PostLogoutRedirectURIs,
+				BackchannelLogoutURI:               config.OAuthConfig.BackchannelLogoutURI,
 				GrantTypes:                         grantTypes,
 				ResponseTypes:                      responseTypes,
 				TokenEndpointAuthMethod:            config.OAuthConfig.TokenEndpointAuthMethod,
@@ -477,6 +478,7 @@ func (ah *applicationHandler) processInboundAuthConfig(
 				RequirePushedAuthorizationRequests: config.OAuthConfig.RequirePushedAuthorizationRequests,
 				DPoPBoundAccessTokens:              config.OAuthConfig.DPoPBoundAccessTokens,
 				IncludeActClaim:                    config.OAuthConfig.IncludeActClaim,
+				ClientIDMetadataDocument:           config.OAuthConfig.ClientIDMetadataDocument,
 				Token:                              config.OAuthConfig.Token,
 				Scopes:                             config.OAuthConfig.Scopes,
 				UserInfo:                           config.OAuthConfig.UserInfo,
@@ -508,9 +510,14 @@ func (ah *applicationHandler) handleError(ctx context.Context, w http.ResponseWr
 
 	statusCode := http.StatusInternalServerError
 	if svcErr.Type == tidcommon.ClientErrorType {
-		if svcErr.Code == ErrorApplicationNotFound.Code {
+		switch svcErr.Code {
+		case ErrorApplicationNotFound.Code, ErrorSharingPolicyNotFound.Code,
+			ErrorApplicationNotSharedToOU.Code:
 			statusCode = http.StatusNotFound
-		} else {
+		case ErrorSharingPolicyExists.Code, ErrorSharingPolicyVersionMismatch.Code:
+			// Both are conflicts with state the caller has not seen, not malformed requests.
+			statusCode = http.StatusConflict
+		default:
 			statusCode = http.StatusBadRequest
 		}
 	}
@@ -548,6 +555,7 @@ func (ah *applicationHandler) processInboundAuthConfigFromRequest(
 				ClientSecret:                       config.OAuthConfig.ClientSecret,
 				RedirectURIs:                       config.OAuthConfig.RedirectURIs,
 				PostLogoutRedirectURIs:             config.OAuthConfig.PostLogoutRedirectURIs,
+				BackchannelLogoutURI:               config.OAuthConfig.BackchannelLogoutURI,
 				GrantTypes:                         config.OAuthConfig.GrantTypes,
 				ResponseTypes:                      config.OAuthConfig.ResponseTypes,
 				TokenEndpointAuthMethod:            config.OAuthConfig.TokenEndpointAuthMethod,
@@ -556,6 +564,7 @@ func (ah *applicationHandler) processInboundAuthConfigFromRequest(
 				RequirePushedAuthorizationRequests: config.OAuthConfig.RequirePushedAuthorizationRequests,
 				DPoPBoundAccessTokens:              config.OAuthConfig.DPoPBoundAccessTokens,
 				IncludeActClaim:                    config.OAuthConfig.IncludeActClaim,
+				ClientIDMetadataDocument:           config.OAuthConfig.ClientIDMetadataDocument,
 				Token:                              config.OAuthConfig.Token,
 				Scopes:                             config.OAuthConfig.Scopes,
 				UserInfo:                           config.OAuthConfig.UserInfo,
@@ -567,4 +576,188 @@ func (ah *applicationHandler) processInboundAuthConfigFromRequest(
 		inboundAuthConfigDTOs = append(inboundAuthConfigDTOs, inboundAuthConfigDTO)
 	}
 	return inboundAuthConfigDTOs
+}
+
+// toFrameworkSharingRequest turns the wire shape into the one the framework takes. The framework is
+// what validates it, so a mode or a reach the schema does not list is carried across as it was sent
+// and refused there.
+func toFrameworkSharingRequest(p model.SharingPolicyUpdateRequest) sharing.PolicyRequest {
+	req := sharing.PolicyRequest{Version: p.Version}
+	if p.AllUnits != nil {
+		req.AllUnits = &sharing.AllUnitsRequest{ExcludedOUIDs: p.AllUnits.ExcludedOUIDs}
+	}
+	if c := p.ChildUnits; c != nil {
+		req.ChildUnits = &sharing.ChildUnitsRequest{
+			Mode:          sharing.ChildUnitsMode(c.Mode),
+			ExcludedOUIDs: c.ExcludedOUIDs,
+		}
+		for _, u := range c.Units {
+			req.ChildUnits.Units = append(req.ChildUnits.Units, sharing.ChildUnitRequest{
+				OUID:  u.OUID,
+				Reach: sharing.UnitReach(u.Reach),
+			})
+		}
+	}
+	if t := p.OtherTreeRoots; t != nil {
+		req.OtherTreeRoots = &sharing.OtherTreeRootsRequest{
+			Mode:          sharing.OtherTreeRootsMode(t.Mode),
+			ExcludedOUIDs: t.ExcludedOUIDs,
+		}
+		for _, u := range t.Units {
+			req.OtherTreeRoots.Units = append(req.OtherTreeRoots.Units, sharing.RootUnitRequest{OUID: u.OUID})
+		}
+	}
+	return req
+}
+
+// decodeSharingBody reads a policy request body through the shared strict decoder, which refuses a
+// field the body does not declare: a misspelled excludedOuIds would otherwise read as a section with
+// no exclusions and share the application with the organization unit the caller named to keep it
+// from. It answers the malformed body itself.
+func decodeSharingBody[T any](ctx context.Context, w http.ResponseWriter, r *http.Request) (*T, bool) {
+	wire, err := sysutils.DecodeJSONBodyStrict[T](r)
+	if err != nil {
+		errResp := apierror.ErrorResponse{
+			Code:        ErrorInvalidRequestFormat.Code,
+			Message:     ErrorInvalidRequestFormat.Error,
+			Description: ErrorInvalidRequestFormat.ErrorDescription,
+		}
+		sysutils.WriteErrorResponse(ctx, w, http.StatusBadRequest, errResp)
+		return nil, false
+	}
+	return wire, true
+}
+
+// HandleSharingPolicyPostRequest records a sharing policy on an application.
+func (ah *applicationHandler) HandleSharingPolicyPostRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	wire, ok := decodeSharingBody[model.SharingPolicyRequest](ctx, w, r)
+	if !ok {
+		return
+	}
+	req := toFrameworkSharingRequest(wire.SharingPolicyUpdateRequest)
+	req.InitiatingOUID = wire.InitiatingOUID
+	// A reach not bounded by where the issuer sits is a deployment decision, so this API leaves it
+	// to a resource file or an import. An edit may still restate such a section to move its
+	// exclusions, and the framework refuses any edit that would introduce one.
+	if req.AllUnits != nil ||
+		(req.OtherTreeRoots != nil && req.OtherTreeRoots.Mode == sharing.OtherTreeRootsAll) {
+		errResp := apierror.ErrorResponse{
+			Code:        ErrorDeploymentWideSharingNotAllowed.Code,
+			Message:     ErrorDeploymentWideSharingNotAllowed.Error,
+			Description: ErrorDeploymentWideSharingNotAllowed.ErrorDescription,
+		}
+		sysutils.WriteErrorResponse(ctx, w, http.StatusBadRequest, errResp)
+		return
+	}
+
+	policy, svcErr := ah.service.CreateSharingPolicy(ctx, r.PathValue("id"), req)
+	if svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusCreated, sharing.ToPolicyResponse(policy))
+}
+
+// HandleSharingPolicyListRequest returns one page of an application's sharing policies.
+func (ah *applicationHandler) HandleSharingPolicyListRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	limit, offset, svcErr := parsePaginationParams(r.URL.Query())
+	if svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+
+	appID := r.PathValue("id")
+	list, svcErr := ah.service.ListSharingPolicies(ctx, appID, limit, offset)
+	if svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, sharing.ToPolicyListResponse(
+		list, "/applications/"+appID+"/sharing-policies", limit, offset))
+}
+
+// HandleSharingPolicyGetRequest returns one of an application's sharing policies.
+func (ah *applicationHandler) HandleSharingPolicyGetRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	policy, svcErr := ah.service.GetSharingPolicy(ctx, r.PathValue("id"), r.PathValue("policyId"))
+	if svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, sharing.ToPolicyResponse(policy))
+}
+
+// HandleSharingPolicyPutRequest replaces a sharing policy's contents.
+func (ah *applicationHandler) HandleSharingPolicyPutRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	wire, ok := decodeSharingBody[model.SharingPolicyUpdateRequest](ctx, w, r)
+	if !ok {
+		return
+	}
+
+	policy, svcErr := ah.service.UpdateSharingPolicy(
+		ctx, r.PathValue("id"), r.PathValue("policyId"), toFrameworkSharingRequest(*wire))
+	if svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, sharing.ToPolicyResponse(policy))
+}
+
+// HandleSharingPolicyDeleteRequest removes a sharing policy.
+func (ah *applicationHandler) HandleSharingPolicyDeleteRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if svcErr := ah.service.DeleteSharingPolicy(
+		ctx, r.PathValue("id"), r.PathValue("policyId")); svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleOverlayRuleGetRequest answers what the organization unit named in ouId may do with the
+// application.
+func (ah *applicationHandler) HandleOverlayRuleGetRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	overlay, svcErr := ah.service.ResolveSharingOverlay(
+		ctx, r.PathValue("id"), r.URL.Query().Get("ouId"))
+	if svcErr != nil {
+		ah.handleError(ctx, w, r, svcErr)
+		return
+	}
+
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, sharing.ToResolvedOverlayResponse(overlay))
+}
+
+// parsePaginationParams reads limit and offset. An absent or zero limit is the default page size,
+// as in the other listings; any other value is passed on for the service to bound.
+func parsePaginationParams(query url.Values) (int, int, *tidcommon.ServiceError) {
+	limit, offset := 0, 0
+	if raw := query.Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0, 0, &ErrorInvalidLimit
+		}
+		limit = parsed
+	}
+	if raw := query.Get("offset"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0, 0, &ErrorInvalidOffset
+		}
+		offset = parsed
+	}
+	if limit == 0 {
+		limit = serverconst.DefaultPageSize
+	}
+	return limit, offset, nil
 }

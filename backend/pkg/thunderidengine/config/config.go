@@ -5,8 +5,11 @@
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -31,6 +34,57 @@ type TrustedIssuerConfig struct {
 	JWKSURL        string          `yaml:"jwks_url"        json:"jwks_url"`
 	Audience       string          `yaml:"audience"        json:"audience"`
 	RequiredClaims []RequiredClaim `yaml:"required_claims" json:"required_claims"`
+	// UserIDClaim names the claim a caller's id is read from where the caller is recorded, such as who
+	// captured a configuration version or applied one to a gateway. It defaults to sub.
+	UserIDClaim string `yaml:"user_id_claim" json:"user_id_claim"`
+	// UserLookup is how a recorded user's id is put a name to when the record is read. Names are not
+	// stored; they are read from the issuer's user API with a token the configured client obtains.
+	UserLookup UserLookupConfig `yaml:"user_lookup" json:"user_lookup"`
+}
+
+// UserIDClaimOrDefault reports the claim a caller's id is read from, sub by default.
+func (c TrustedIssuerConfig) UserIDClaimOrDefault() string {
+	return cmp.Or(strings.TrimSpace(c.UserIDClaim), "sub")
+}
+
+// UserLookupConfig names the trusted issuer's user API and the client that may call it, so a control
+// plane shows who captured or applied a version by name without keeping names in its own store.
+type UserLookupConfig struct {
+	// URL is the issuer's endpoint for one user, with {id} where the user's id goes, such as
+	// https://cloud.example.com/users/{id}. Unset, recorded users are shown by id alone.
+	URL string `yaml:"url" json:"url"`
+	// TokenURL is the issuer's token endpoint, asked for a client credentials token for the lookups.
+	TokenURL string `yaml:"token_url" json:"token_url"`
+	// ClientID and ClientSecret are the machine-to-machine application registered at the issuer for
+	// the lookups.
+	ClientID     string `yaml:"client_id"     json:"client_id"`
+	ClientSecret string `yaml:"client_secret" json:"client_secret"`
+	// Scopes are what the token is asked for, as the user endpoint requires.
+	Scopes []string `yaml:"scopes" json:"scopes"`
+	// NameAttribute is the attribute of the user the name is read from, username by default.
+	NameAttribute string `yaml:"name_attribute" json:"name_attribute"`
+	// CacheTTL is how long a name once read is kept, in seconds, 300 by default.
+	CacheTTL int `yaml:"cache_ttl" json:"cache_ttl"`
+}
+
+// Enabled reports whether recorded users are put a name to at all.
+func (c UserLookupConfig) Enabled() bool {
+	return strings.TrimSpace(c.URL) != ""
+}
+
+// UserURL is the URL of one user's record at the issuer.
+func (c UserLookupConfig) UserURL(id string) string {
+	return strings.ReplaceAll(strings.TrimSpace(c.URL), "{id}", url.PathEscape(id))
+}
+
+// NameAttributeOrDefault reports the attribute a user's name is read from, username by default.
+func (c UserLookupConfig) NameAttributeOrDefault() string {
+	return cmp.Or(strings.TrimSpace(c.NameAttribute), "username")
+}
+
+// CacheTTLOrDefault reports how long a name once read is kept, five minutes by default.
+func (c UserLookupConfig) CacheTTLOrDefault() time.Duration {
+	return time.Duration(cmp.Or(c.CacheTTL, 300)) * time.Second
 }
 
 // SecurityConfig holds the security-related configuration details.
@@ -152,12 +206,13 @@ type RedisConfig struct {
 
 // ServerConfig holds the server configuration details.
 type ServerConfig struct {
-	Hostname       string         `yaml:"hostname"   json:"hostname"`
-	Port           int            `yaml:"port"       json:"port"`
-	HTTPOnly       bool           `yaml:"http_only"  json:"http_only"`
-	PublicURL      string         `yaml:"public_url" json:"public_url"`
-	Identifier     string         `yaml:"identifier" json:"identifier"`
-	SecurityConfig SecurityConfig `yaml:"security"   json:"security"`
+	Hostname                   string         `yaml:"hostname"   json:"hostname"`
+	Port                       int            `yaml:"port"       json:"port"`
+	HTTPOnly                   bool           `yaml:"http_only"  json:"http_only"`
+	PublicURL                  string         `yaml:"public_url" json:"public_url"`
+	Identifier                 string         `yaml:"identifier" json:"identifier"`
+	SecurityConfig             SecurityConfig `yaml:"security"   json:"security"`
+	EnableOUQualifiedEndpoints bool           `yaml:"enable_ou_qualified_endpoints" json:"enable_ou_qualified_endpoints"` //nolint:lll // one tag pair
 }
 
 // GateClientConfig holds the client configuration details.
@@ -241,6 +296,17 @@ func (c DCRConfig) IsEnabled() bool {
 	return c.Enabled != nil && *c.Enabled
 }
 
+// CIMDConfig holds the OAuth Client ID Metadata Document configuration.
+type CIMDConfig struct {
+	Enabled *bool `yaml:"enabled" json:"enabled"`
+}
+
+// IsEnabled returns whether CIMD is enabled, defaulting to false if unset
+// (an explicit default lives in default.json).
+func (c CIMDConfig) IsEnabled() bool {
+	return c.Enabled != nil && *c.Enabled
+}
+
 // PARConfig holds the Pushed Authorization Request (RFC 9126) configuration.
 type PARConfig struct {
 	RequirePAR bool  `yaml:"require_par" json:"require_par"`
@@ -261,16 +327,26 @@ type CIBAConfig struct {
 	IDTokenHintMaxAgeDays int `yaml:"id_token_hint_max_age_days" json:"id_token_hint_max_age_days"`
 }
 
+// ClientAssertionConfig holds the private_key_jwt client assertion validation policy.
+type ClientAssertionConfig struct {
+	// MaxLifetime caps how far (seconds) 'exp' may exceed 'iat' (or now, if 'iat' is absent).
+	MaxLifetime int64 `yaml:"max_lifetime" json:"max_lifetime"`
+	// MaxIatAge caps how far (seconds) 'iat' may be in the past, when present.
+	MaxIatAge int64 `yaml:"max_iat_age" json:"max_iat_age"`
+}
+
 // OAuthConfig holds the OAuth configuration details.
 type OAuthConfig struct {
 	RefreshToken         RefreshTokenConfig         `yaml:"refresh_token"               json:"refresh_token"`
 	AuthorizationCode    AuthorizationCodeConfig    `yaml:"authorization_code"          json:"authorization_code"`
 	AuthorizationRequest AuthorizationRequestConfig `yaml:"authorization_request"       json:"authorization_request"`
 	DCR                  DCRConfig                  `yaml:"dcr"                         json:"dcr"`
+	CIMD                 CIMDConfig                 `yaml:"cimd"                        json:"cimd"`
 	PAR                  PARConfig                  `yaml:"par"                         json:"par"`
 	DPoP                 DPoPConfig                 `yaml:"dpop"                        json:"dpop"`
 	AuthClass            AuthClassConfig            `yaml:"auth_class"                  json:"auth_class"`
 	CIBA                 CIBAConfig                 `yaml:"ciba"                        json:"ciba"`
+	ClientAssertion      ClientAssertionConfig      `yaml:"client_assertion"            json:"client_assertion"`
 	Revocation           RevocationConfig           `yaml:"revocation"                  json:"revocation"`
 	TokenExchange        TokenExchangeConfig        `yaml:"token_exchange"              json:"token_exchange"`
 	// AllowWildcardRedirectURI enables wildcard pattern matching for redirect URIs.
@@ -325,6 +401,46 @@ type LogoutConfig struct {
 	// explicit false in deployment.yaml overrides the default.json default of true; a nil
 	// pointer means "not set" and keeps the default.
 	Enabled *bool `yaml:"enabled" json:"enabled"`
+	// Backchannel configures OIDC Back-Channel Logout delivery.
+	Backchannel BackchannelLogoutConfig `yaml:"backchannel" json:"backchannel"`
+}
+
+// BackchannelLogoutConfig holds the settings for OIDC Back-Channel Logout delivery. Durations are
+// in seconds. The defaults live in default.json.
+type BackchannelLogoutConfig struct {
+	// Enabled controls whether terminated sessions are announced to relying parties. It uses a
+	// pointer so an explicit false in deployment.yaml overrides default.json; nil means "not set".
+	Enabled *bool `yaml:"enabled" json:"enabled"`
+	// TokenValidityPeriod is the lifetime of a logout token.
+	TokenValidityPeriod int64 `yaml:"token_validity_period" json:"token_validity_period"`
+	// RequestTimeout bounds one delivery attempt to a relying party, in seconds; at most 30.
+	RequestTimeout int64 `yaml:"request_timeout" json:"request_timeout"`
+	// MaxAttempts is the number of delivery attempts per relying party; 1 means no retry. At most 10.
+	MaxAttempts int `yaml:"max_attempts" json:"max_attempts"`
+	// RetryDelay is the wait before the second attempt, in seconds; it doubles on every further
+	// attempt. At most 60. A Retry-After returned on 429 is honored up to the longest wait of that
+	// schedule.
+	RetryDelay int64 `yaml:"retry_delay" json:"retry_delay"`
+	// MaxInFlight caps concurrent deliveries across the whole dispatcher.
+	MaxInFlight int `yaml:"max_in_flight" json:"max_in_flight"`
+	// QueueSize caps pending termination events; beyond it events are dropped and recorded.
+	QueueSize int `yaml:"queue_size" json:"queue_size"`
+	// RejectPrivateAddresses rejects back-channel logout URIs whose host is localhost or an IP literal
+	// in a loopback, link-local, private or unspecified range. Hostnames are checked as written. It
+	// uses a pointer so an explicit false in deployment.yaml overrides the default of true.
+	RejectPrivateAddresses *bool `yaml:"reject_private_addresses" json:"reject_private_addresses"`
+}
+
+// IsEnabled reports whether back-channel logout delivery is active, defaulting to false when
+// unset (an explicit default lives in default.json).
+func (c BackchannelLogoutConfig) IsEnabled() bool {
+	return c.Enabled != nil && *c.Enabled
+}
+
+// RejectsPrivateAddresses reports whether private back-channel logout URIs are rejected. It defaults
+// to true when unset, so a configuration that never loaded default.json still fails safe.
+func (c BackchannelLogoutConfig) RejectsPrivateAddresses() bool {
+	return c.RejectPrivateAddresses == nil || *c.RejectPrivateAddresses
 }
 
 // IsEnabled reports whether the OAuth logout endpoint is active,
@@ -336,6 +452,13 @@ func (c LogoutConfig) IsEnabled() bool {
 // RevocationConfig holds grant-scoped (token family) revocation settings.
 type RevocationConfig struct {
 	TokenFamily TokenFamilyRevocationConfig `yaml:"token_family" json:"token_family"`
+	Criteria    CriteriaRevocationConfig    `yaml:"criteria"     json:"criteria"`
+}
+
+// CriteriaRevocationConfig bounds what one criteria-based revocation may write.
+type CriteriaRevocationConfig struct {
+	// MaxEntriesPerChange caps the deny-list rows one administrative revocation may write; 0 refuses every one.
+	MaxEntriesPerChange int `yaml:"max_entries_per_change" json:"max_entries_per_change"`
 }
 
 // TokenFamilyRevocationConfig toggles the triggers that revoke a whole token family (one authorization
