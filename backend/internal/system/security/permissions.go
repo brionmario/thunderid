@@ -407,6 +407,10 @@ func InitSystemPermissions(handle string) {
 		{"PUT /notification-templates/**", p.NotificationTemplate},
 		{"DELETE /notification-templates/**", p.NotificationTemplate},
 
+		// System app configuration. The Admin App and the Account App read their own section, so any
+		// signed-in user may read it; saving it keeps the root permission every server config needs.
+		{"GET /server-config/system-apps/**", ""},
+
 		// Import APIs.
 		{"POST /import", p.Root},
 		{"POST /import/delete", p.Root},

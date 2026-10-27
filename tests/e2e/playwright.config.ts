@@ -50,6 +50,7 @@ const BROWSERS = [
 const SERVER_STATE_SPECS = [
   "**/sample-app-authentication/sample-app-mfa-login.spec.ts",
   "**/sample-app-authentication/sample-app-social-login.spec.ts",
+  "**/apps/app-builders.spec.ts",
 ];
 
 /**

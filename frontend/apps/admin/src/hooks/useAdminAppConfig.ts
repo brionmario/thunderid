@@ -5,6 +5,7 @@ import {useGrantedPermissions} from '@thunderid/react';
 import {
   ADMIN_APP_PAGES,
   DEFAULT_ADMIN_APP_CONFIG,
+  useGetAppConfig,
   type AppPageDefinition,
   type AppConfig,
   type AppPageConfig,
@@ -12,12 +13,13 @@ import {
 import {MANAGED_RESOURCES, type ManagedResource} from '../configs/RouteConfig';
 
 /**
- * The Admin App configuration, resolved for the signed-in admin.
+ * The Admin App configuration the Console saved, resolved for the signed-in admin.
  */
 export interface AdminAppConfig {
   config: AppConfig;
   /**
-   * Whether the admin's permissions are still loading.
+   * Whether the configuration or the admin's permissions are still loading. The default
+   * configuration is used meanwhile.
    */
   isLoading: boolean;
   /**
@@ -32,11 +34,13 @@ export interface AdminAppConfig {
 }
 
 /**
- * Resolves the Admin App's default configuration for the signed-in admin.
+ * Reads the Admin App configuration saved in the Console, falling back to the default
+ * configuration while it loads or when it cannot be read, so the app stays usable.
  */
 export default function useAdminAppConfig(): AdminAppConfig {
-  const {can, isLoading} = useGrantedPermissions();
-  const config: AppConfig = DEFAULT_ADMIN_APP_CONFIG;
+  const {data, isLoading: isConfigLoading} = useGetAppConfig('ADMIN');
+  const {can, isLoading: isPermissionsLoading} = useGrantedPermissions();
+  const config: AppConfig = data ?? DEFAULT_ADMIN_APP_CONFIG;
   const page = (resource: ManagedResource): AppPageConfig | undefined =>
     config.pages.find((candidate: AppPageConfig) => candidate.key === resource);
 
@@ -60,7 +64,7 @@ export default function useAdminAppConfig(): AdminAppConfig {
 
   return {
     config,
-    isLoading,
+    isLoading: isConfigLoading || isPermissionsLoading,
     page,
     visibleResources: MANAGED_RESOURCES.filter(isVisible),
   };

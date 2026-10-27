@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {ChangeCredential, User, UserProfile} from '@thunderid/react';
-import {Avatar, Box, Link, Paper, Stack, Typography} from '@wso2/oxygen-ui';
+import {Avatar, Box, CircularProgress, Link, Paper, Stack, Typography} from '@wso2/oxygen-ui';
 import type {JSX, ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Navigate, Link as RouterLink} from 'react-router';
@@ -43,10 +43,19 @@ function PageHeading({subtitle, title}: {subtitle: string; title: string}): JSX.
 }
 
 /**
- * Shows a page only while the app configuration has it on. Otherwise it sends the user home.
+ * Shows a page only while the Console has it on. Otherwise it sends the user home.
  */
 function PageGate({children, page}: {children: ReactNode; page: AccountPage}): ReactNode {
-  const {visiblePages} = useAccountAppConfig();
+  const {t} = useTranslation();
+  const {isLoading, visiblePages} = useAccountAppConfig();
+
+  if (isLoading) {
+    return (
+      <Stack alignItems="center" sx={{py: 8}}>
+        <CircularProgress aria-label={t('account:loading', 'Loading')} />
+      </Stack>
+    );
+  }
 
   if (visiblePages.includes(page)) {
     return children;
@@ -64,11 +73,11 @@ const displayName = (user: Record<string, unknown> | null | undefined): string |
   );
 
 /**
- * Welcomes the user and offers a card for every page that is on.
+ * Welcomes the user and offers a card for every page the Console turned on.
  */
 export function HomePage(): JSX.Element {
   const {t} = useTranslation();
-  const {visiblePages} = useAccountAppConfig();
+  const {isLoading, visiblePages} = useAccountAppConfig();
 
   return (
     <>
@@ -95,6 +104,16 @@ export function HomePage(): JSX.Element {
           );
         }}
       </User>
+      {isLoading && (
+        <Stack alignItems="center">
+          <CircularProgress aria-label={t('account:loading', 'Loading')} />
+        </Stack>
+      )}
+      {!isLoading && visiblePages.length === 0 && (
+        <Typography color="text.secondary" sx={{textAlign: 'center'}}>
+          {t('account:empty.description', 'Your administrator has not turned on any pages for this app.')}
+        </Typography>
+      )}
       <Box sx={{display: 'grid', gridTemplateColumns: {xs: '1fr', sm: 'repeat(2, 1fr)'}, gap: 3}}>
         {visiblePages.map((page: AccountPage) => (
           <Paper key={page} variant="outlined" sx={{borderRadius: 5, display: 'flex', flexDirection: 'column'}}>
@@ -142,7 +161,7 @@ export function HomePage(): JSX.Element {
 }
 
 /**
- * The signed-in user's profile, editable when the app configuration allows it.
+ * The signed-in user's profile, editable when the Console allows it.
  */
 export function ProfilePage(): JSX.Element {
   const {t} = useTranslation();
@@ -184,7 +203,7 @@ function CredentialCard({attribute}: {attribute: string}): JSX.Element {
 }
 
 /**
- * The signed-in user's credentials. The password card is shown when the app configuration allows it.
+ * The signed-in user's credentials. The password card is shown when the Console allows it.
  */
 export function SecurityPage(): JSX.Element {
   const {t} = useTranslation();

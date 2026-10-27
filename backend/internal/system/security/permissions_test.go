@@ -467,6 +467,14 @@ func TestGetRequiredPermissionForAPI(t *testing.T) {
 			name:   "Unmapped path falls back to system",
 			method: http.MethodGet, path: "/applications", wantPerm: p.Root,
 		},
+		{
+			name:   "GET a system app's configuration is open to any signed-in user",
+			method: http.MethodGet, path: "/server-config/system-apps/admin", wantPerm: "",
+		},
+		{
+			name:   "PUT a system app's configuration needs the root permission",
+			method: http.MethodPut, path: "/server-config/system-apps/admin", wantPerm: p.Root,
+		},
 		{name: "Root path falls back to system", method: http.MethodGet, path: "/", wantPerm: p.Root},
 		{
 			name:   "Unknown POST falls back to system",
