@@ -50,10 +50,11 @@ const BROWSERS = [
 const SERVER_STATE_SPECS = [
   "**/sample-app-authentication/sample-app-mfa-login.spec.ts",
   "**/sample-app-authentication/sample-app-social-login.spec.ts",
+  "**/apps/app-builders.spec.ts",
 ];
 
 /**
- * The accessibility audits scan the Admin Console's pages, which are the same in every browser, so
+ * The accessibility audits scan the Console's pages, which are the same in every browser, so
  * one browser's run is the whole coverage. They run on chromium only.
  */
 const ACCESSIBILITY_SPECS = ["**/accessibility/**/*.spec.ts"];

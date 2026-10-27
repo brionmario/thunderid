@@ -1,6 +1,6 @@
 # ThunderID Data Plane E2E Tests
 
-End-to-end automation test suite for the Data Plane, built with [Playwright](https://playwright.dev/). It runs against the quickstart pack (a Control Plane, the Data Plane it manages, and auth-dp) and drives the Data Plane at `https://localhost:8090`: its Admin Console (users, agents, groups, roles), and the business applications that sign in through it (the React SDK sample, the Wayfinder sample).
+End-to-end automation test suite for the Data Plane, built with [Playwright](https://playwright.dev/). It runs against the quickstart pack (a Control Plane, the Data Plane it manages, and auth-dp) and drives the Data Plane at `https://localhost:8090`: its Console's user and agent pages, and the business applications that sign in through it (the React SDK sample, the Wayfinder sample).
 
 Applications, connections, flows, user types and settings are authored on the Control Plane or through the API, so the Console pages for them are not part of this suite; the API and component tests cover them.
 

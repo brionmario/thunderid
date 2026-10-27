@@ -66,7 +66,7 @@ user_password_secret_name() {
 # plane's setup runs, since auth-dp's bootstrap already needs CP_CONSOLE_URL.
 export_console_urls() {
     export CP_CONSOLE_URL="https://localhost:$CP_PORT/console"
-    export ADMIN_CONSOLE_URL="https://localhost:$DP_PORT/console"
+    export ADMIN_CONSOLE_URL="https://localhost:$DP_PORT/admin"
 }
 
 # export_dp_ca_certificate exports DP_CA_CERTIFICATE, the managed Data Plane's certificate, which
@@ -89,8 +89,8 @@ export_dp_ca_certificate() {
 # gateway. Two come from the Control Plane's own bootstrap, which runs while the Data Plane is not
 # up to capture them to:
 #
-#   - the ClientID and redirect URIs of the ADMIN_CONSOLE application
-#     (quickstart/bootstrap/dp-cp/04-quickstart-admin-console.yaml). The redirect URIs are a list,
+#   - the ClientID and redirect URIs of the Admin App application
+#     (quickstart/bootstrap/dp-cp/04-quickstart-admin-app.yaml). The redirect URIs are a list,
 #     so the variable holds a JSON array;
 #   - the identifier of the System resource server, which a gateway holds for itself and is
 #     the Data Plane's own MCP URL;
@@ -116,8 +116,8 @@ seed_dp_values() {
             -H "Content-Type: application/json" \
             -d "$2" || { echo "❌ Failed to seed $1 on the Data Plane."; failed=true; }
     }
-    dp_put "/variables/APPLICATION_ADMIN_CONSOLE_CLIENT_ID" '{"value":"ADMIN_CONSOLE"}'
-    dp_put "/variables/APPLICATION_ADMIN_CONSOLE_REDIRECT_URIS" "{\"value\":\"[\\\"$ADMIN_CONSOLE_URL\\\"]\"}"
+    dp_put "/variables/APPLICATION_ADMIN_APP_CLIENT_ID" '{"value":"ADMIN_CONSOLE"}'
+    dp_put "/variables/APPLICATION_ADMIN_APP_REDIRECT_URIS" "{\"value\":\"[\\\"$ADMIN_CONSOLE_URL\\\"]\"}"
     dp_put "/variables/RESOURCE_SERVER_SYSTEM_IDENTIFIER" "{\"value\":\"https://localhost:$DP_PORT/mcp\"}"
     password_json="$(printf '%s' "$SERVICE_DESK_PASSWORD" | sed 's/\\/\\\\/g; s/"/\\"/g')"
     dp_put "/secrets/$(user_password_secret_name "$SERVICE_DESK_USERNAME")" "{\"value\":\"$password_json\"}"

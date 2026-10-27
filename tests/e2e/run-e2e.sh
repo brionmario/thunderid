@@ -6,7 +6,7 @@
 #
 # Extracts the built quickstart pack (make build_quickstart) to tests/e2e/distribution/, runs its
 # setup.sh once, then starts its three deployments (auth-dp, the managed Data Plane and the Control
-# Plane). The suite exercises the Data Plane (https://localhost:8090): its Admin Console and the
+# Plane). The suite exercises the Data Plane (https://localhost:8090): its Console and the
 # applications it authenticates. The Data Plane's resources are imported directly through its
 # import API (authenticated with OAuth2 as the Service Desk Admin), and the Playwright test suite
 # runs against it.
@@ -101,7 +101,7 @@ DIST_FOLDER="thunderid-quickstart-${VERSION}-${PKG_OS}-${GO_ARCH}"
 DIST_HOME="$SCRIPT_DIR/distribution"
 DIST_ZIP="$PROJECT_ROOT/target/dist/${DIST_FOLDER}.zip"
 
-# The Service Desk Admin: the account that signs into the Data Plane's Admin Console.
+# The Service Desk Admin: the account that signs into the Data Plane's Console and Admin App.
 ADMIN_USER="${ADMIN_USERNAME:-admin}"
 ADMIN_PASS="${ADMIN_PASSWORD:-admin}"
 ADMIN_TOKEN=""
@@ -207,13 +207,13 @@ stop_server() {
     rm -rf "$DIST_HOME"
 }
 
-# Obtains an admin token via OAuth2 auth code + PKCE (ADMIN_CONSOLE app, Service Desk Admin credentials) and sets the
+# Obtains an admin token via OAuth2 auth code + PKCE (Admin App, client ADMIN_CONSOLE, Service Desk Admin credentials) and sets the
 # global ADMIN_TOKEN. Must be called plainly (never `ADMIN_TOKEN=$(mint_admin_token)` and never
 # inside an `if`/`||`) - its `exit 1` calls only abort the right way when the function's own exit
 # status is what `set -e` sees.
 mint_admin_token() {
     echo "Obtaining admin token..."
-    local CONSOLE_REDIRECT_URI="$SERVER_URL/console"
+    local CONSOLE_REDIRECT_URI="$SERVER_URL/admin"
     local CODE_VERIFIER CODE_CHALLENGE
     CODE_VERIFIER=$(openssl rand -hex 32 | cut -c1-43)
     CODE_CHALLENGE=$(printf '%s' "$CODE_VERIFIER" | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
