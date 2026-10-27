@@ -1,0 +1,108 @@
+---
+displayed_sidebar: null
+title: Management API
+docType: reference
+description: Call the management API functions from a React app through the ThunderIDProvider's fetcher, and cache them with your own data fetching library.
+---
+
+# Management API
+
+A React app calls the <ProductName /> management API through the [JavaScript management functions](../../../../javascript/apis/management), re-exported from `@thunderid/react`. `useManagementRequestConfig` gives those functions the configuration of the surrounding `ThunderIDProvider`: its base URL, its endpoint override for the collection, and the fetcher that authorizes the request. Your data fetching library owns caching and refetching.
+
+To render lists, forms, and details without writing requests, use the admin components such as `UserList` instead. They load their own data.
+
+## List and Delete Users with TanStack Query
+
+```jsx title="src/Users.jsx" showLineNumbers
+import { deleteUser, getUsers, useManagementRequestConfig } from '@thunderid/react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+
+function Users() {
+  const config = useManagementRequestConfig('users')
+  const queryClient = useQueryClient()
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['users', { limit: 20 }],
+    queryFn: () => getUsers({ ...config, limit: 20 }),
+  })
+  const { mutate: removeUser, isPending } = useMutation({
+    mutationFn: (userId) => deleteUser({ ...config, userId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+  })
+
+  if (isLoading) return <p>Loading...</p>
+  if (error) return <p>Could not load users.</p>
+
+  return (
+    <ul>
+      {data.users.map((user) => (
+        <li key={user.id}>
+          {user.display}
+          <button disabled={isPending} onClick={() => removeUser(user.id)}>
+            Delete
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+```
+
+:::note
+`useManagementRequestConfig` must be called inside a component rendered within `ThunderIDProvider`. The access token of the signed-in user needs the permissions the server requires for each resource.
+:::
+
+## useManagementRequestConfig
+
+```ts
+useManagementRequestConfig(collection: ManagementCollection): ManagementRequestConfig
+```
+
+| Argument | Type | Description |
+| :--- | :--- | :--- |
+| `collection` | `ManagementCollection` | The collection the call targets, such as `'users'`, `'groups'`, `'roles'`, `'agents'`, or `'applications'`. Selects the matching `endpoints` override. |
+
+It returns `{ baseUrl, url, fetcher }`. Spread it into any management function, together with the function's own arguments. The returned object keeps its identity across renders until the provider's configuration changes, so it can go in a dependency list.
+
+## Fetcher Resolution
+
+The returned `fetcher` is the `http.fetcher` prop on [`ThunderIDProvider`](../../contexts/thunderid-provider) when one is set, and otherwise the SDK's authenticated HTTP client, which attaches the signed-in user's access token.
+
+A custom fetcher replaces the SDK's authenticated client, so it must attach the access token itself, or call a proxy that authorizes the request on the server. `http.fetcher` applies to management requests only. Sign-in, token, and flow requests keep using the SDK's own HTTP client.
+
+```jsx
+<ThunderIDProvider
+  clientId="<your-app-client-id>"
+  baseUrl="https://idp.example.com"
+  http={{
+    fetcher: (url, config) => fetch(`/api/proxy?target=${encodeURIComponent(url)}`, config),
+  }}
+>
+  <App />
+</ThunderIDProvider>
+```
+
+## Management API on a Separate Host
+
+The functions send requests to `{baseUrl}/{collection}`. When the management API runs on a different host from the authorization server, set the collection's URL in `endpoints` on `ThunderIDProvider`, and `useManagementRequestConfig` returns it as `url`:
+
+```jsx
+<ThunderIDProvider
+  clientId="<your-app-client-id>"
+  baseUrl="https://idp.example.com"
+  endpoints={{
+    users: 'https://rs.example.com/users',
+    groups: 'https://rs.example.com/groups',
+  }}
+>
+  <App />
+</ThunderIDProvider>
+```
+
+## Administration Flows
+
+Pass `administrationMode: 'flow'` to run an operation through the administration flow the server configures for it, for example a user deletion that also revokes the user's grants and ends their sessions. See [Administration Flows](../../../../javascript/apis/management#administration-flows).
+
+## Error Handling
+
+The functions throw `ThunderIDAPIError`. Its `serverError` property carries the server's own error code and message, which you can use to show a translated message. See [Error Handling](../../../../javascript/apis/management#error-handling) for the codes.

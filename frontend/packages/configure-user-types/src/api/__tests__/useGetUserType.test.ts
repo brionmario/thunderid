@@ -2,173 +2,64 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import UserTypeQueryKeys from '../../constants/userTypeQueryKeys';
 import type {ApiUserType} from '../../types/user-types';
 import useGetUserType from '../useGetUserType';
 
-const mockHttpRequest = vi.fn();
-// Mock the dependencies
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({http: {request: mockHttpRequest}}),
+const {config, mockGetUserType} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetUserType: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: vi.fn(),
-  };
-});
-
-const {useConfig} = await import('@thunderid/contexts');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getUserType: mockGetUserType}));
 
 describe('useGetUserType', () => {
-  let mockGetServerUrl: ReturnType<typeof vi.fn>;
-
-  const mockUserType: ApiUserType = {
-    id: '123',
+  const userType: ApiUserType = {
+    id: 'type-1',
     handle: 'person',
     displayName: 'Person',
     ouId: 'ou-1',
     allowSelfRegistration: true,
-    schema: {
-      email: {
-        type: 'string',
-        required: true,
-      },
-    },
+    schema: {email: {type: 'string', required: true}},
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: mockGetServerUrl,
-    } as unknown as ReturnType<typeof useConfig>);
+    mockGetUserType.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should load through the SDK with the management config', async () => {
+    mockGetUserType.mockResolvedValueOnce(userType);
 
-  it('should initialize with loading state when id is provided', () => {
-    mockHttpRequest.mockReturnValue(new Promise(() => null)); // Never resolves
-
-    const {result} = renderHook(() => useGetUserType('123'));
-
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toBeNull();
-  });
-
-  it('should not fetch when no id is provided', () => {
-    const {result} = renderHook(() => useGetUserType());
-
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(mockHttpRequest).not.toHaveBeenCalled();
-  });
-
-  it('should not fetch when id is an empty string', () => {
-    const {result} = renderHook(() => useGetUserType(''));
-
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(mockHttpRequest).not.toHaveBeenCalled();
-  });
-
-  it('should successfully fetch a single user type', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserType,
-    });
-
-    const {result} = renderHook(() => useGetUserType('123'));
+    const {result, queryClient} = renderHook(() => useGetUserType('type-1'));
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockUserType);
-    expect(result.current.data?.id).toBe('123');
-    expect(result.current.data?.displayName).toBe('Person');
+    expect(result.current.data).toEqual(userType);
+    expect(mockGetUserType).toHaveBeenCalledWith({...config, userTypeId: 'type-1'});
+    expect(queryClient.getQueryData([UserTypeQueryKeys.USER_TYPE, 'type-1'])).toEqual(userType);
   });
 
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to fetch user type');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should not fetch until an id is known', () => {
+    const {result} = renderHook(() => useGetUserType(undefined));
 
-    const {result} = renderHook(() => useGetUserType('123'));
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGetUserType).not.toHaveBeenCalled();
+  });
+
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Not found');
+    mockGetUserType.mockRejectedValueOnce(error);
+
+    const {result} = renderHook(() => useGetUserType('type-1'));
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
-    expect(result.current.data).toBeUndefined();
-  });
-
-  it('should use correct server URL and endpoint', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserType,
-    });
-
-    renderHook(() => useGetUserType('123'));
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/user-types/123?include=display',
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }),
-    );
-  });
-
-  it('should use correct query key', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserType,
-    });
-
-    const {result, queryClient} = renderHook(() => useGetUserType('123'));
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    const queryKey = [UserTypeQueryKeys.USER_TYPE, '123'];
-    const cachedData = queryClient.getQueryData(queryKey);
-    expect(cachedData).toEqual(mockUserType);
-  });
-
-  it('should support refetching', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockUserType});
-
-    const {result} = renderHook(() => useGetUserType('123'));
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data?.displayName).toBe('Person');
-
-    const updatedUserType: ApiUserType = {
-      ...mockUserType,
-      displayName: 'Updated Person',
-    };
-
-    mockHttpRequest.mockResolvedValueOnce({data: updatedUserType});
-
-    await result.current.refetch();
-
-    await waitFor(() => {
-      expect(result.current.data?.displayName).toBe('Updated Person');
-    });
-
-    expect(mockHttpRequest).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBe(error);
   });
 });

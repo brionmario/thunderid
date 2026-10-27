@@ -9,6 +9,8 @@ import EditTokenSettings from '../EditTokenSettings';
 
 // Stable mock references, created via vi.hoisted so the hoisted vi.mock factories can use them.
 // New identities on every render would re-fire the schema-fetch effect in a loop.
+const managementApiConfig = vi.hoisted(() => ({baseUrl: 'https://api.example.com'}));
+
 const {mockHttp, mockGetServerUrl, mockLogger} = vi.hoisted(() => ({
   mockHttp: {
     request: vi.fn().mockResolvedValue({data: {id: 'schema-1', handle: 'default', displayName: 'Default', schema: {}}}),
@@ -25,9 +27,23 @@ vi.mock('@thunderid/configure-user-types', async (importOriginal) => ({
   }),
 }));
 
+// The SDK reads each user type through the management config's fetcher; route it through the same
+// request mock. A stable config keeps fetchSchemas' effect from re-firing on every render.
+vi.mock('@thunderid/components', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/components')>()),
+  useManagementApiConfig: () => managementApiConfig,
+}));
+
 vi.mock('@thunderid/react', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@thunderid/react')>()),
-  useThunderID: () => ({http: mockHttp}),
+  getUserTypes: async (): Promise<unknown> =>
+    ((await mockHttp.request({url: 'https://api.example.com/user-types', method: 'GET'})) as {data: unknown}).data,
+  getUserType: async ({userTypeId}: {userTypeId: string}): Promise<unknown> =>
+    (
+      (await mockHttp.request({url: `https://api.example.com/user-types/${userTypeId}`, method: 'GET'})) as {
+        data: unknown;
+      }
+    ).data,
 }));
 
 vi.mock('@thunderid/contexts', async (importOriginal) => {

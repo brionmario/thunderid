@@ -4,6 +4,7 @@
 import {QueryErrorNotice} from '@thunderid/components';
 import {useDataGridLocaleText} from '@thunderid/hooks';
 import {useLogger} from '@thunderid/logger/react';
+import {BaseRoleList, type AdminListRenderProps, type RoleSummary as SdkRoleSummary} from '@thunderid/react';
 import {IconButton, Typography, Tooltip, DataGrid, ListingTable} from '@wso2/oxygen-ui';
 import {Eye, Pencil, Trash2} from '@wso2/oxygen-ui-icons-react';
 import {useMemo, useCallback, useState, type JSX} from 'react';
@@ -23,16 +24,9 @@ export default function RolesList(): JSX.Element {
   const logger = useLogger('RolesList');
   const dataGridLocaleText = useDataGridLocaleText();
   const routes = useRoleRoutes();
-  const [paginationModel, setPaginationModel] = useState<DataGrid.GridPaginationModel>({pageSize: 10, page: 0});
-
-  const rolesParams = useMemo(
-    () => ({
-      limit: paginationModel.pageSize,
-      offset: paginationModel.page * paginationModel.pageSize,
-    }),
-    [paginationModel],
-  );
-  const {data, isLoading, error, refetch} = useGetRoles(rolesParams);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [offset, setOffset] = useState<number>(0);
+  const rolesQuery = useGetRoles({limit: pageSize, offset});
 
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
@@ -138,24 +132,34 @@ export default function RolesList(): JSX.Element {
     [handleDeleteClick, handleViewClick, t],
   );
 
-  if (error) {
-    return (
-      <QueryErrorNotice
-        error={error}
-        t={t}
-        variant="block"
-        title={t('roles:listing.error', 'Failed to load roles')}
-        onRetry={() => void refetch()}
-      />
-    );
-  }
+  const renderList = ({
+    isLoading,
+    limit,
+    onPageChange,
+    rows,
+    totalResults,
+  }: AdminListRenderProps<SdkRoleSummary>): JSX.Element => {
+    if (rolesQuery.error) {
+      return (
+        <QueryErrorNotice
+          error={rolesQuery.error}
+          t={t}
+          variant="block"
+          title={t('roles:listing.error', 'Failed to load roles')}
+          onRetry={() => {
+            rolesQuery.refetch().catch((_error: unknown) => {
+              logger.error('Failed to reload roles', {error: _error});
+            });
+          }}
+        />
+      );
+    }
 
-  return (
-    <>
+    return (
       <ListingTable.Provider variant="data-grid-card" loading={isLoading}>
         <ListingTable.Container disablePaper>
           <ListingTable.DataGrid
-            rows={data?.roles ?? []}
+            rows={rows as RoleSummary[]}
             columns={columns}
             getRowId={(row) => (row as RoleSummary).id}
             onRowClick={(params) => {
@@ -167,9 +171,16 @@ export default function RolesList(): JSX.Element {
               });
             }}
             paginationMode="server"
-            rowCount={data?.totalResults ?? 0}
-            paginationModel={paginationModel}
-            onPaginationModelChange={setPaginationModel}
+            rowCount={totalResults}
+            paginationModel={{page: Math.floor(offset / limit), pageSize: limit}}
+            onPaginationModelChange={(model: DataGrid.GridPaginationModel) => {
+              if (model.pageSize !== limit) {
+                setPageSize(model.pageSize);
+                onPageChange?.(0);
+                return;
+              }
+              onPageChange?.(model.page * limit);
+            }}
             pageSizeOptions={[5, 10, 25]}
             disableRowSelectionOnClick
             // Filtering is not wired end to end, so the column filter panel stays hidden.
@@ -182,6 +193,22 @@ export default function RolesList(): JSX.Element {
           />
         </ListingTable.Container>
       </ListingTable.Provider>
+    );
+  };
+
+  return (
+    <>
+      <BaseRoleList
+        roles={(rolesQuery.data?.roles ?? []) as SdkRoleSummary[]}
+        totalResults={rolesQuery.data?.totalResults ?? 0}
+        limit={pageSize}
+        offset={offset}
+        onPageChange={setOffset}
+        isLoading={rolesQuery.isLoading}
+        error={rolesQuery.error?.message ?? null}
+      >
+        {renderList}
+      </BaseRoleList>
 
       <RoleDeleteDialog open={deleteDialogOpen} roleId={selectedRoleId} onClose={handleDeleteDialogClose} />
     </>

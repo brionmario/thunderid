@@ -12,6 +12,7 @@ vi.mock('@thunderid/hooks', () => ({
 }));
 
 vi.mock('@thunderid/components', () => ({
+  useManagementApiConfig: vi.fn(),
   SettingsCard: ({
     title,
     description,

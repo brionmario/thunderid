@@ -33,6 +33,24 @@ vi.mock('@thunderid/react', async (importOriginal) => ({
   useThunderID: () => ({http: h.http}),
 }));
 
+// The SDK's API functions send through the management config's fetcher; this one hands each
+// request to the same recorder as the http client.
+vi.mock('@thunderid/components', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useManagementApiConfig: () => ({
+    baseUrl: 'https://api.test.com',
+    fetcher: async (url: string, init: RequestInit): Promise<Response> => {
+      const {data} = await h.http.request({
+        url,
+        method: init.method ?? 'GET',
+        data: typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+      });
+
+      return new Response(JSON.stringify(data), {status: 200, headers: {'Content-Type': 'application/json'}});
+    },
+  }),
+}));
+
 vi.mock('@thunderid/configure-organization-units', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@thunderid/configure-organization-units')>()),
   OrganizationUnitTreePicker: ({

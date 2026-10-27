@@ -1,91 +1,62 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor} from '@testing-library/react';
-import {renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import GroupQueryKeys from '../../constants/group-query-keys';
 import type {MemberListResponse} from '../../models/group';
+import useGetGroupMembers from '../useGetGroupMembers';
 
-const mockHttpRequest = vi.fn();
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockGetGroupMembers} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetGroupMembers: vi.fn(),
 }));
 
-const mockGetServerUrl = vi.fn<() => string>(() => 'https://localhost:8090');
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
-
-const {default: useGetGroupMembers} = await import('../useGetGroupMembers');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getGroupMembers: mockGetGroupMembers}));
 
 describe('useGetGroupMembers', () => {
-  const mockMembersData: MemberListResponse = {
-    totalResults: 2,
-    startIndex: 0,
-    count: 2,
-    members: [
-      {id: 'u1', type: 'user'},
-      {id: 'g2', type: 'group'},
-    ],
+  const response: MemberListResponse = {
+    totalResults: 1,
+    startIndex: 1,
+    count: 1,
+    members: [{id: 'u1', type: 'user', display: 'John'}],
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReturnValue('https://localhost:8090');
+    mockGetGroupMembers.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should load the first page by default', async () => {
+    mockGetGroupMembers.mockResolvedValueOnce(response);
 
-  it('should fetch group members', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockMembersData});
     const {result} = renderHook(() => useGetGroupMembers('g1'));
 
     await waitFor(() => {
-      expect(result.current.data).toEqual(mockMembersData);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://localhost:8090/groups/g1/members?limit=30&offset=0&include=display',
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(response);
+    expect(mockGetGroupMembers).toHaveBeenCalledWith({...config, groupId: 'g1', limit: 30, offset: 0});
   });
 
-  it('should fetch with custom pagination', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockMembersData});
-    renderHook(() => useGetGroupMembers('g1', {limit: 10, offset: 5}));
+  it('should pass the paging params through and cache each page under its own key', async () => {
+    mockGetGroupMembers.mockResolvedValueOnce(response);
+
+    const {result, queryClient} = renderHook(() => useGetGroupMembers('g1', {limit: 10, offset: 20}));
 
     await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: 'https://localhost:8090/groups/g1/members?limit=10&offset=5&include=display',
-        }),
-      );
+      expect(result.current.isSuccess).toBe(true);
     });
+
+    expect(mockGetGroupMembers).toHaveBeenCalledWith({...config, groupId: 'g1', limit: 10, offset: 20});
+    expect(queryClient.getQueryData([GroupQueryKeys.GROUP_MEMBERS, 'g1', {limit: 10, offset: 20}])).toEqual(response);
   });
 
-  it('should not fetch when groupId is undefined', () => {
+  it('should not fetch without a group ID', () => {
     const {result} = renderHook(() => useGetGroupMembers(undefined));
 
     expect(result.current.fetchStatus).toBe('idle');
-    expect(mockHttpRequest).not.toHaveBeenCalled();
-  });
-
-  it('should handle error', async () => {
-    mockHttpRequest.mockRejectedValue(new Error('Failed'));
-    const {result} = renderHook(() => useGetGroupMembers('g1'));
-
-    await waitFor(() => {
-      expect(result.current.error).toBeTruthy();
-    });
+    expect(mockGetGroupMembers).not.toHaveBeenCalled();
   });
 });

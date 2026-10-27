@@ -2,103 +2,63 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import AgentTypeQueryKeys from '../../constants/agentTypeQueryKeys';
 import type {ApiAgentType} from '../../models/agent-type';
 import useGetAgentType from '../useGetAgentType';
 
-const mockHttpRequest = vi.fn();
-const mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockGetAgentType} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetAgentType: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getAgentType: mockGetAgentType}));
 
 describe('useGetAgentType', () => {
-  const mockAgentType: ApiAgentType = {
-    id: 'aaa-bbb-ccc',
+  const agentType: ApiAgentType = {
+    id: 'type-1',
     handle: 'default',
     displayName: 'Default',
-    ouId: '111e8400-e29b-41d4-a716-446655440000',
-    schema: {
-      modelProvider: {
-        type: 'string',
-        required: true,
-        enum: ['openai', 'anthropic', 'gemini', 'mistral', 'custom'],
-      },
-      model: {type: 'string', required: true},
-      function: {
-        type: 'string',
-        required: false,
-        enum: [
-          'task-automation',
-          'rag-retrieval',
-          'code-gen',
-          'data-analysis',
-          'orchestrator',
-          'sub-agent',
-          'assistant',
-          'custom',
-        ],
-      },
-    },
+    ouId: 'ou-1',
+    schema: {name: {type: 'string', required: true}},
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReset().mockReturnValue('https://api.test.com');
+    mockGetAgentType.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should load through the SDK with the management config', async () => {
+    mockGetAgentType.mockResolvedValueOnce(agentType);
 
-  it('should not fetch when id is empty', () => {
-    mockHttpRequest.mockReturnValue(new Promise(() => null));
-
-    const {result} = renderHook(() => useGetAgentType(undefined));
-
-    expect(result.current.isLoading).toBe(false);
-    expect(mockHttpRequest).not.toHaveBeenCalled();
-  });
-
-  it('should fetch agent type by ID', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockAgentType});
-
-    const {result} = renderHook(() => useGetAgentType(mockAgentType.id));
+    const {result, queryClient} = renderHook(() => useGetAgentType('type-1'));
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockAgentType);
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: `https://api.test.com/agent-types/${mockAgentType.id}?include=display`,
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(agentType);
+    expect(mockGetAgentType).toHaveBeenCalledWith({...config, agentTypeId: 'type-1'});
+    expect(queryClient.getQueryData([AgentTypeQueryKeys.AGENT_TYPE, 'type-1'])).toEqual(agentType);
   });
 
-  it('should handle API error', async () => {
-    const apiError = new Error('Agent type not found');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should not fetch until an id is known', () => {
+    const {result} = renderHook(() => useGetAgentType(undefined));
 
-    const {result} = renderHook(() => useGetAgentType('aaa-bbb-ccc'));
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGetAgentType).not.toHaveBeenCalled();
+  });
+
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Not found');
+    mockGetAgentType.mockRejectedValueOnce(error);
+
+    const {result} = renderHook(() => useGetAgentType('type-1'));
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
+    expect(result.current.error).toBe(error);
   });
 });

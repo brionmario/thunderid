@@ -2,93 +2,46 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import RoleQueryKeys from '../../constants/role-query-keys';
+import type {RoleAssignment} from '../../models/role';
 import useAddRoleAssignments from '../useAddRoleAssignments';
 
-// Mock the dependencies
-vi.mock('@thunderid/react', () => ({
-  useThunderID: vi.fn(),
+const {config, mockAddRoleAssignments, mockShowToast} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockAddRoleAssignments: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: vi.fn(),
-    useToast: vi.fn(),
-  };
-});
-
-const {useThunderID} = await import('@thunderid/react');
-const {useConfig, useToast} = await import('@thunderid/contexts');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({addRoleAssignments: mockAddRoleAssignments}));
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useToast: () => ({showToast: mockShowToast}),
+}));
 
 describe('useAddRoleAssignments', () => {
-  let mockHttpRequest: ReturnType<typeof vi.fn>;
-  let mockGetServerUrl: ReturnType<typeof vi.fn>;
-  let mockShowToast: ReturnType<typeof vi.fn>;
+  const assignments: RoleAssignment[] = [
+    {id: 'user-1', type: 'user'},
+    {id: 'group-1', type: 'group'},
+  ];
 
   beforeEach(() => {
-    mockHttpRequest = vi.fn();
-    mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-    mockShowToast = vi.fn();
-
-    vi.mocked(useThunderID).mockReturnValue({
-      http: {
-        request: mockHttpRequest,
-      },
-    } as unknown as ReturnType<typeof useThunderID>);
-
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: mockGetServerUrl,
-    } as unknown as ReturnType<typeof useConfig>);
-
-    vi.mocked(useToast).mockReturnValue({
-      showToast: mockShowToast,
-    } as unknown as ReturnType<typeof useToast>);
+    mockAddRoleAssignments.mockReset().mockResolvedValue(undefined);
+    mockShowToast.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should initialize with idle state', () => {
+  it('should assign the role through the SDK with the management config', async () => {
     const {result} = renderHook(() => useAddRoleAssignments());
 
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toBeNull();
-    expect(result.current.isPending).toBe(false);
-    expect(result.current.isIdle).toBe(true);
-    expect(typeof result.current.mutate).toBe('function');
+    await result.current.mutateAsync({roleId: 'role-1', assignments});
+
+    expect(mockAddRoleAssignments).toHaveBeenCalledWith({...config, assignments, roleId: 'role-1'});
   });
 
-  it('should successfully add role assignments', async () => {
-    mockHttpRequest.mockResolvedValueOnce(undefined);
-
-    const {result} = renderHook(() => useAddRoleAssignments());
-
-    result.current.mutate({
-      roleId: 'role-1',
-      assignments: [{id: 'user-1', type: 'user'}],
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.error).toBeNull();
-    expect(result.current.isPending).toBe(false);
-  });
-
-  it('should make correct API call', async () => {
-    mockHttpRequest.mockResolvedValueOnce(undefined);
-
-    const assignments = [
-      {id: 'user-1', type: 'user' as const},
-      {id: 'group-1', type: 'group' as const},
-    ];
-
-    const {result} = renderHook(() => useAddRoleAssignments());
+  it('should refresh the role assignments and confirm with a toast', async () => {
+    const {result, queryClient} = renderHook(() => useAddRoleAssignments());
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
 
     result.current.mutate({roleId: 'role-1', assignments});
 
@@ -96,112 +49,23 @@ describe('useAddRoleAssignments', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/roles/role-1/assignments/add',
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        data: {assignments},
-      }),
-    );
-  });
-
-  it('should invalidate ROLE_ASSIGNMENTS cache for specific roleId on success', async () => {
-    mockHttpRequest.mockResolvedValueOnce(undefined);
-
-    const {result, queryClient} = renderHook(() => useAddRoleAssignments());
-
-    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    result.current.mutate({
-      roleId: 'role-1',
-      assignments: [{id: 'user-1', type: 'user'}],
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(invalidateQueriesSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        queryKey: [RoleQueryKeys.ROLE_ASSIGNMENTS, 'role-1'],
-      }),
-    );
-  });
-
-  it('should show success toast on success', async () => {
-    mockHttpRequest.mockResolvedValueOnce(undefined);
-
-    const {result} = renderHook(() => useAddRoleAssignments());
-
-    result.current.mutate({
-      roleId: 'role-1',
-      assignments: [{id: 'user-1', type: 'user'}],
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [RoleQueryKeys.ROLE_ASSIGNMENTS, 'role-1']});
     expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
-  it('should not show a toast on error', async () => {
-    mockHttpRequest.mockRejectedValueOnce(new Error('Failed'));
-
-    const {result} = renderHook(() => useAddRoleAssignments());
-
-    result.current.mutate({
-      roleId: 'role-1',
-      assignments: [{id: 'user-1', type: 'user'}],
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
-
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to add assignments');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
-
-    const {result} = renderHook(() => useAddRoleAssignments());
-
-    result.current.mutate({
-      roleId: 'role-1',
-      assignments: [{id: 'user-1', type: 'user'}],
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toEqual(apiError);
-    expect(result.current.isPending).toBe(false);
-  });
-
-  it('should handle multiple assignments in single request', async () => {
-    mockHttpRequest.mockResolvedValueOnce(undefined);
-
-    const assignments = [
-      {id: 'user-1', type: 'user' as const},
-      {id: 'user-2', type: 'user' as const},
-      {id: 'group-1', type: 'group' as const},
-    ];
+  it('should surface the error without a toast', async () => {
+    const error = new Error('Assignee not found');
+    mockAddRoleAssignments.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useAddRoleAssignments());
 
     result.current.mutate({roleId: 'role-1', assignments});
 
     await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
+      expect(result.current.isError).toBe(true);
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.data).toEqual({assignments});
+    expect(result.current.error).toBe(error);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

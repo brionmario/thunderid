@@ -1,75 +1,69 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor} from '@testing-library/react';
-import {renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import GroupQueryKeys from '../../constants/group-query-keys';
+import useAddGroupMembers from '../useAddGroupMembers';
 
-const mockHttpRequest = vi.fn();
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockAddGroupMembers, mockShowToast} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockAddGroupMembers: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
-const mockGetServerUrl = vi.fn<() => string>(() => 'https://localhost:8090');
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
-
-const {default: useAddGroupMembers} = await import('../useAddGroupMembers');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({addGroupMembers: mockAddGroupMembers}));
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useToast: () => ({showToast: mockShowToast}),
+}));
 
 describe('useAddGroupMembers', () => {
+  const members = [{id: 'u1', type: 'user' as const}];
+
   beforeEach(() => {
-    mockHttpRequest.mockReset();
+    mockAddGroupMembers.mockReset().mockResolvedValue({id: 'g1'});
+    mockShowToast.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should add members successfully', async () => {
-    mockHttpRequest.mockResolvedValue({});
+  it('should add the members through the SDK with the management config', async () => {
     const {result} = renderHook(() => useAddGroupMembers());
 
-    result.current.mutate({
-      groupId: 'g1',
-      members: [
-        {id: 'u1', type: 'user'},
-        {id: 'u2', type: 'user'},
-      ],
-    });
+    await result.current.mutateAsync({groupId: 'g1', members});
+
+    expect(mockAddGroupMembers).toHaveBeenCalledWith({...config, groupId: 'g1', members});
+  });
+
+  it('should refresh the group, its members and the groups list, and confirm with a toast', async () => {
+    const {result, queryClient} = renderHook(() => useAddGroupMembers());
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    result.current.mutate({groupId: 'g1', members});
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://localhost:8090/groups/g1/members/add',
-        method: 'POST',
-        data: {
-          members: [
-            {id: 'u1', type: 'user'},
-            {id: 'u2', type: 'user'},
-          ],
-        },
-      }),
-    );
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUP, 'g1']});
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUPS]});
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUP_MEMBERS, 'g1']});
+    expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
-  it('should handle error', async () => {
-    mockHttpRequest.mockRejectedValue(new Error('Failed to add'));
+  it('should surface the error without a toast', async () => {
+    const error = new Error('Failed to add');
+    mockAddGroupMembers.mockRejectedValueOnce(error);
+
     const {result} = renderHook(() => useAddGroupMembers());
 
-    result.current.mutate({groupId: 'g1', members: [{id: 'u1', type: 'user'}]});
+    result.current.mutate({groupId: 'g1', members});
 
     await waitFor(() => {
-      expect(result.current.error?.message).toBe('Failed to add');
+      expect(result.current.isError).toBe(true);
     });
+
+    expect(result.current.error).toBe(error);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

@@ -3,7 +3,7 @@
 
 import type {AccessStatus, AccessStatusReport} from '@thunderid/types';
 import type {TFunction} from 'i18next';
-import type {LifecycleCategory} from './lifecycleAction';
+import type AccessStatusCategory from './accessStatusCategory';
 
 /**
  * The effective access statuses a status read reports.
@@ -17,7 +17,7 @@ export const AccessStatuses = {
 /** The lockedMethods entry for a lock on every method. */
 const ENTITY_METHOD = 'entity';
 
-function activeHint(category: LifecycleCategory, t: TFunction): string {
+function activeHint(category: AccessStatusCategory, t: TFunction): string {
   switch (category) {
     case 'agent':
       return t('common:accountStatus.active.hint.agent', 'This agent can authenticate normally.');
@@ -28,7 +28,7 @@ function activeHint(category: LifecycleCategory, t: TFunction): string {
   }
 }
 
-function suspendedHint(category: LifecycleCategory, t: TFunction): string {
+function suspendedHint(category: AccessStatusCategory, t: TFunction): string {
   switch (category) {
     case 'agent':
       return t(
@@ -50,7 +50,7 @@ function suspendedHint(category: LifecycleCategory, t: TFunction): string {
 
 // Applications are never locked, so the lock wording is the agent's or the user's.
 
-function lockedHint(category: LifecycleCategory, t: TFunction): string {
+function lockedHint(category: AccessStatusCategory, t: TFunction): string {
   return category === 'agent'
     ? t(
         'common:accountStatus.locked.hint.agent',
@@ -62,7 +62,7 @@ function lockedHint(category: LifecycleCategory, t: TFunction): string {
       );
 }
 
-function lockedFailedAttemptsHint(category: LifecycleCategory, t: TFunction): string {
+function lockedFailedAttemptsHint(category: AccessStatusCategory, t: TFunction): string {
   return category === 'agent'
     ? t(
         'common:accountStatus.locked.hint.failedAttempts.agent',
@@ -74,13 +74,13 @@ function lockedFailedAttemptsHint(category: LifecycleCategory, t: TFunction): st
       );
 }
 
-function lockedSomeMethodsTitle(category: LifecycleCategory, t: TFunction): string {
+function lockedSomeMethodsTitle(category: AccessStatusCategory, t: TFunction): string {
   return category === 'agent'
     ? t('common:accountStatus.locked.title.someMethods.agent', 'Authentication locked for some methods')
     : t('common:accountStatus.locked.title.someMethods.user', 'Sign-in locked for some methods');
 }
 
-function lockedSomeMethodsHint(category: LifecycleCategory, t: TFunction): string {
+function lockedSomeMethodsHint(category: AccessStatusCategory, t: TFunction): string {
   return category === 'agent'
     ? t(
         'common:accountStatus.locked.hint.someMethods.agent',
@@ -149,7 +149,7 @@ export interface AccessStatusDescription {
  */
 export default function describeAccessStatus(
   status: AccessStatusReport | undefined,
-  category: LifecycleCategory,
+  category: AccessStatusCategory,
   t: TFunction,
 ): AccessStatusDescription | null {
   const value = status?.value ?? AccessStatuses.ACTIVE;

@@ -5,6 +5,7 @@ import {screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {renderWithProviders} from '@thunderid/test-utils';
 import type * as OxygenUI from '@wso2/oxygen-ui';
+import type {ReactNode} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import type {GroupListResponse} from '../../models/group';
 import GroupsList from '../GroupsList';
@@ -103,9 +104,36 @@ vi.mock('react-router', async () => {
   };
 });
 
-const mockUseGetGroups = vi.fn();
+const mockUseGetGroups = vi.fn<() => Record<string, unknown>>();
+const mockRefetch = vi.fn();
+
 vi.mock('../../api/useGetGroups', () => ({
-  default: (...args: unknown[]): unknown => mockUseGetGroups(...args),
+  default: () => ({refetch: mockRefetch, ...mockUseGetGroups()}),
+}));
+
+// The SDK's BaseGroupList renders through its own provider; this stand-in hands its render props
+// straight to the Console's render function, which is what these tests cover.
+vi.mock('@thunderid/react', async () => ({
+  ...(await vi.importActual<Record<string, unknown>>('@thunderid/react')),
+  BaseGroupList: ({
+    children,
+    error = null,
+    groups,
+    isLoading = false,
+    limit = 10,
+    offset = 0,
+    onPageChange = undefined,
+    totalResults = 0,
+  }: {
+    children: (props: object) => ReactNode;
+    error?: string | null;
+    groups: unknown[];
+    isLoading?: boolean;
+    limit?: number;
+    offset?: number;
+    onPageChange?: (offset: number) => void;
+    totalResults?: number;
+  }): ReactNode => children({error, isLoading, limit, offset, onPageChange, rows: groups, totalResults}),
 }));
 
 const mockDeleteMutate = vi.fn();
@@ -136,6 +164,7 @@ describe('GroupsList', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRefetch.mockResolvedValue(undefined);
     mockUseGetGroups.mockReturnValue({
       data: mockGroupsData,
       isLoading: false,
@@ -190,14 +219,12 @@ describe('GroupsList', () => {
     });
   });
 
-  it('should refetch groups when the retry action is clicked in the error state', async () => {
+  it('should reload groups when the retry action is clicked in the error state', async () => {
     const user = userEvent.setup();
-    const mockRefetch = vi.fn();
     mockUseGetGroups.mockReturnValue({
       data: null,
       isLoading: false,
       error: new Error('Fetch failed'),
-      refetch: mockRefetch,
     });
     renderWithProviders(<GroupsList />);
 

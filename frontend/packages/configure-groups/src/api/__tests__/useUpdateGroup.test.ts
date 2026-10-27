@@ -1,78 +1,74 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor} from '@testing-library/react';
-import {renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import type {Group} from '../../models/group';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import GroupQueryKeys from '../../constants/group-query-keys';
+import type {UpdateGroupRequest} from '../../models/requests';
+import useUpdateGroup from '../useUpdateGroup';
 
-const mockHttpRequest = vi.fn();
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockUpdateGroup, mockShowToast} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockUpdateGroup: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
-const mockGetServerUrl = vi.fn<() => string>(() => 'https://localhost:8090');
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
-
-const {default: useUpdateGroup} = await import('../useUpdateGroup');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({updateGroup: mockUpdateGroup}));
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useToast: () => ({showToast: mockShowToast}),
+}));
 
 describe('useUpdateGroup', () => {
-  const mockUpdatedGroup: Group = {
-    id: 'g1',
-    name: 'Updated Group',
-    description: 'Updated desc',
-    ouId: 'ou1',
-  };
+  const data: UpdateGroupRequest = {name: 'Renamed', ouId: 'ou-1'};
+  const updated = {id: 'g1', ...data};
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
+    mockUpdateGroup.mockReset();
+    mockShowToast.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should update the group through the SDK with the management config', async () => {
+    mockUpdateGroup.mockResolvedValueOnce(updated);
 
-  it('should update a group successfully', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockUpdatedGroup});
     const {result} = renderHook(() => useUpdateGroup());
 
-    result.current.mutate({
-      groupId: 'g1',
-      data: {name: 'Updated Group', description: 'Updated desc', ouId: 'ou1'},
-    });
+    await expect(result.current.mutateAsync({groupId: 'g1', data})).resolves.toEqual(updated);
+    expect(mockUpdateGroup).toHaveBeenCalledWith({...config, groupId: 'g1', payload: data});
+  });
+
+  it('should refresh the group, its members and the groups list, and confirm with a toast', async () => {
+    mockUpdateGroup.mockResolvedValueOnce(updated);
+
+    const {result, queryClient} = renderHook(() => useUpdateGroup());
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    result.current.mutate({groupId: 'g1', data});
 
     await waitFor(() => {
-      expect(result.current.data).toEqual(mockUpdatedGroup);
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://localhost:8090/groups/g1',
-        method: 'PUT',
-      }),
-    );
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUP, 'g1']});
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUPS]});
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUP_MEMBERS, 'g1']});
+    expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
-  it('should handle error', async () => {
-    mockHttpRequest.mockRejectedValue(new Error('Update failed'));
+  it('should surface the error without a toast', async () => {
+    const error = new Error('Name taken');
+    mockUpdateGroup.mockRejectedValueOnce(error);
+
     const {result} = renderHook(() => useUpdateGroup());
 
-    result.current.mutate({
-      groupId: 'g1',
-      data: {name: 'Updated', ouId: 'ou1'},
-    });
+    result.current.mutate({groupId: 'g1', data});
 
     await waitFor(() => {
-      expect(result.current.error?.message).toBe('Update failed');
+      expect(result.current.isError).toBe(true);
     });
+
+    expect(result.current.error).toBe(error);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

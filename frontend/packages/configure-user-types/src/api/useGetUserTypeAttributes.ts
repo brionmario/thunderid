@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useQueries, type UseQueryResult} from '@tanstack/react-query';
-import {useConfig} from '@thunderid/contexts';
+import {useManagementApiConfig} from '@thunderid/components';
 import {useLogger} from '@thunderid/logger/react';
-import {useThunderID} from '@thunderid/react';
+import {getUserType} from '@thunderid/react';
 import useGetUserTypes from './useGetUserTypes';
 import UserTypeQueryKeys from '../constants/userTypeQueryKeys';
 import type {ApiUserType} from '../types/user-types';
@@ -88,8 +88,7 @@ function aggregateAttributes(results: UseQueryResult<ApiUserType>[]): Aggregated
  * @returns The aggregated attributes and the combined loading state.
  */
 export default function useGetUserTypeAttributes(): UseGetUserTypeAttributesResult {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const logger = useLogger('useGetUserTypeAttributes');
 
   const {data: userTypesData, isLoading: isLoadingList} = useGetUserTypes({limit: USER_TYPE_FETCH_LIMIT});
@@ -105,21 +104,8 @@ export default function useGetUserTypeAttributes(): UseGetUserTypeAttributesResu
   const {attributes, isLoadingSchemas} = useQueries({
     queries: (userTypesData?.types ?? []).map((userType) => ({
       queryKey: [UserTypeQueryKeys.USER_TYPE, userType.id],
-      queryFn: async (): Promise<ApiUserType> => {
-        const serverUrl: string = getServerUrl();
-
-        const response: {
-          data: ApiUserType;
-        } = await http.request({
-          url: `${serverUrl}/user-types/${userType.id}?include=display`,
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        } as unknown as Parameters<typeof http.request>[0]);
-
-        return response.data;
-      },
+      queryFn: async (): Promise<ApiUserType> =>
+        (await getUserType({...config, userTypeId: userType.id})) as unknown as ApiUserType,
       staleTime: ATTRIBUTE_STALE_TIME,
     })),
     combine: (results: UseQueryResult<ApiUserType>[]) => ({

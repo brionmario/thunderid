@@ -5,8 +5,8 @@ import type {AccessStatusReport} from '@thunderid/types';
 import {Alert, AlertTitle, Box, Typography, type SxProps, type Theme} from '@wso2/oxygen-ui';
 import {type JSX} from 'react';
 import {useTranslation} from 'react-i18next';
+import type AccessStatusCategory from './accessStatusCategory';
 import describeAccessStatus, {AccessStatuses} from './describeAccessStatus';
-import type {LifecycleCategory} from './lifecycleAction';
 
 export interface AccessStatusBannerProps {
   /**
@@ -16,7 +16,7 @@ export interface AccessStatusBannerProps {
   /**
    * Identity category, which decides the verb in the message. Defaults to `user`.
    */
-  category?: LifecycleCategory;
+  category?: AccessStatusCategory;
   /** Spacing from the host layout. */
   sx?: SxProps<Theme>;
 }

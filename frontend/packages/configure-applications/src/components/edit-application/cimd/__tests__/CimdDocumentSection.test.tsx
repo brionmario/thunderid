@@ -1,22 +1,28 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {useConfig} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
 import {render, screen, userEvent, waitFor} from '@thunderid/test-utils';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import type {Application} from '../../../../models/application';
 import type {OAuth2Config} from '../../../../models/oauth';
 import CimdDocumentSection from '../CimdDocumentSection';
 
-vi.mock('@thunderid/react', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@thunderid/react')>()),
-  useThunderID: vi.fn(),
-}));
+// The SDK's API functions send through the management config's fetcher; this one hands each request
+// to the recorder below and answers with what it returns.
+vi.mock('@thunderid/components', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useManagementApiConfig: () => ({
+    baseUrl: 'https://localhost:8090',
+    fetcher: async (url: string, init: RequestInit): Promise<Response> => {
+      const {data, status = 200} = (await request({
+        url,
+        method: init.method ?? 'GET',
+        data: typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+      })) as {data: unknown; status?: number};
 
-vi.mock('@thunderid/contexts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
-  useConfig: vi.fn(),
+      return new Response(JSON.stringify(data), {status, headers: {'Content-Type': 'application/json'}});
+    },
+  }),
 }));
 
 const CLIENT_ID = 'https://vscode.dev/oauth/client-metadata.json';
@@ -44,10 +50,6 @@ const request = vi.fn();
 describe('CimdDocumentSection', () => {
   beforeEach(() => {
     request.mockReset();
-    vi.mocked(useThunderID).mockReturnValue({http: {request}} as unknown as ReturnType<typeof useThunderID>);
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: () => 'https://localhost:8090',
-    } as unknown as ReturnType<typeof useConfig>);
   });
 
   it('shows the stored values read-only', () => {
@@ -108,7 +110,7 @@ describe('CimdDocumentSection', () => {
   });
 
   it('shows why the document could not be re-fetched', async () => {
-    request.mockRejectedValue(Object.assign(new Error('Bad Request'), {response: {data: {code: 'CIMD-1003'}}}));
+    request.mockResolvedValue({status: 400, data: {code: 'CIMD-1003'}});
     render(
       <CimdDocumentSection
         application={application}

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {describe, expect, it, vi} from 'vitest';
-import {FlowExecutionFailure} from '../../flow/administrationFlow';
 import getErrorMessage from '../getErrorMessage';
 
 describe('getErrorMessage', () => {
@@ -102,11 +101,15 @@ describe('getErrorMessage', () => {
   // A flow refusal arrives as a failed step inside a 200 response, so its code is on the thrown error
   // rather than on response.data.
   describe('for a refused administration flow step', () => {
+    // The shape of the SDK's AdministrationFlowError: the step's code, and the step error as `flowError`.
+    const flowFailure = (flowError: {code: string; [key: string]: unknown}, message: string): Error =>
+      Object.assign(new Error(message), {code: flowError.code, flowError});
+
     it('should resolve the step code to its localized message', () => {
       const t = vi.fn((key: string) =>
         key === 'common:errors.FET-1100' ? 'This role cannot be deleted in its current state.' : '',
       );
-      const error = new FlowExecutionFailure(
+      const error = flowFailure(
         {code: 'FET-1100', message: {defaultValue: 'Role deletion not allowed'}},
         'The role deletion flow did not complete',
       );
@@ -118,7 +121,7 @@ describe('getErrorMessage', () => {
 
     it('should prefer the feature namespace for a step code', () => {
       const t = vi.fn((key: string) => (key === 'errors.ROL-1020' ? 'The assignee no longer holds this role.' : ''));
-      const error = new FlowExecutionFailure({code: 'ROL-1020'}, 'The role assignment removal flow did not complete');
+      const error = flowFailure({code: 'ROL-1020'}, 'The role assignment removal flow did not complete');
 
       expect(getErrorMessage(error, t, 'assignments.remove.error')).toBe('The assignee no longer holds this role.');
     });
@@ -127,7 +130,7 @@ describe('getErrorMessage', () => {
       const t = vi.fn((key: string, options?: {max?: string}) =>
         key === 'common:errors.GRP-1017' ? `Nested more than ${options?.max} levels deep.` : '',
       );
-      const error = new FlowExecutionFailure(
+      const error = flowFailure(
         {code: 'GRP-1017', message: {params: {max: '8'}}},
         'The group deletion flow did not complete',
       );
@@ -139,7 +142,7 @@ describe('getErrorMessage', () => {
       const t = vi.fn((key: string, options?: {max?: string}) =>
         key === 'common:errors.GRP-1017' ? `Nested more than ${options?.max} levels deep.` : '',
       );
-      const error = new FlowExecutionFailure(
+      const error = flowFailure(
         {code: 'GRP-1017', description: {params: {max: '8'}}},
         'The group deletion flow did not complete',
       );
@@ -151,9 +154,34 @@ describe('getErrorMessage', () => {
       const t = vi.fn((key: string, options?: Record<string, unknown>) =>
         key === 'delete.error' ? ((options?.['defaultValue'] as string | undefined) ?? '') : '',
       );
-      const error = new FlowExecutionFailure({code: 'FET-9999'}, 'The role deletion flow did not complete');
+      const error = flowFailure({code: 'FET-9999'}, 'The role deletion flow did not complete');
 
       expect(getErrorMessage(error, t, 'delete.error', 'Failed to delete role.')).toBe('Failed to delete role.');
+    });
+  });
+
+  // The SDK's management API functions throw their own error types.
+  describe('for an error from the SDK', () => {
+    it("should resolve the server's code an SDK API error carries", () => {
+      const t = vi.fn((key: string, options?: Record<string, unknown>) =>
+        key === 'errors.USR-1027' ? `Remove the ${String(options?.['dependencies'])} first.` : '',
+      );
+      const error = Object.assign(new Error('User cannot be deleted'), {
+        code: 'deleteUser-ResponseError-001',
+        serverError: {code: 'USR-1027', description: {params: {dependencies: 'agents'}}},
+      });
+
+      expect(getErrorMessage(error, t, 'delete.error')).toBe('Remove the agents first.');
+    });
+
+    it('should resolve the step code an SDK administration flow error carries', () => {
+      const t = vi.fn((key: string) => (key === 'errors.FET-1100' ? 'Not allowed now.' : ''));
+      const error = Object.assign(new Error('Role deletion not allowed'), {
+        code: 'FET-1100',
+        flowError: {code: 'FET-1100'},
+      });
+
+      expect(getErrorMessage(error, t, 'delete.error')).toBe('Not allowed now.');
     });
   });
 });

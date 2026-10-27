@@ -806,7 +806,9 @@ export default function ApplicationCreatePage(): JSX.Element {
         // name is edited (preventing a resubmit-and-fail loop), then return there.
         // getApplicationErrorMessage resolves the errors.APP-1020 message for this case (and the
         // generic message otherwise).
-        const errorCode = (err as {response?: {data?: {code?: string}}})?.response?.data?.code;
+        // The SDK carries the server's envelope as `serverError`; an HTTP client error as its body.
+        const apiError = err as {response?: {data?: {code?: string}}; serverError?: {code?: string}};
+        const errorCode = (apiError.response?.data ?? apiError.serverError)?.code;
         if (errorCode === ApplicationConstants.DUPLICATE_APP_NAME_ERROR_CODE) {
           setRejectedAppNames((prev) => (prev.includes(appName) ? prev : [...prev, appName]));
           setCurrentStep(ApplicationCreateFlowStep.DETAILS);

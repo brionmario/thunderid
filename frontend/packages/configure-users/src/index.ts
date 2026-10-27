@@ -30,17 +30,12 @@ export {default as UserQueryKeys} from './constants/user-query-keys';
 export * from './models/users';
 
 // Pages
-// UserAddPage picks by administration mode: a form when creation runs natively, and the
-// flow-driven journey otherwise.
-export {default as UserAddPage} from './pages/UserAddRoute';
-export {default as UserAddFlowPage} from './pages/UserAddPage';
-export {default as UserAddFormPage} from './pages/UserAddFormPage';
+export {default as UserAddPage} from './pages/UserAddFormPage';
 export {default as UserEditPage} from './pages/UserEditPage';
 export {default as UsersListPage} from './pages/UsersListPage';
 
 // Routes
 export type {UserRoutePaths} from './hooks/useUserRoutes';
-export {default as useFlowTextResolver} from './hooks/useFlowTextResolver';
 export {defaultUserRoutePaths, default as useUserRoutes} from './hooks/useUserRoutes';
 
 // Utils

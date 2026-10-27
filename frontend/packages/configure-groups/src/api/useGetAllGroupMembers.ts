@@ -2,36 +2,30 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useQuery, type UseQueryResult} from '@tanstack/react-query';
-import {useConfig} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {getGroupMembers} from '@thunderid/react';
 import GroupQueryKeys from '../constants/group-query-keys';
 import type {Member, MemberListResponse} from '../models/group';
 
 const pageSize = 100;
 
 export default function useGetAllGroupMembers(groupId: string | undefined): UseQueryResult<MemberListResponse> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
 
   return useQuery<MemberListResponse>({
     queryKey: [GroupQueryKeys.GROUP_MEMBERS, groupId, 'all'],
     queryFn: async (): Promise<MemberListResponse> => {
-      const serverUrl: string = getServerUrl();
       const members: Member[] = [];
       let totalResults = 0;
       let offset = 0;
 
       do {
-        const queryParams: URLSearchParams = new URLSearchParams({
-          limit: pageSize.toString(),
-          offset: offset.toString(),
-          include: 'display',
-        });
-        const response: {data: MemberListResponse} = await http.request({
-          url: `${serverUrl}/groups/${groupId}/members?${queryParams.toString()}`,
-          method: 'GET',
-        } as unknown as Parameters<typeof http.request>[0]);
-        const page = response.data;
+        const page = (await getGroupMembers({
+          ...config,
+          groupId: groupId!,
+          limit: pageSize,
+          offset,
+        })) as unknown as MemberListResponse;
 
         members.push(...page.members);
         totalResults = page.totalResults;

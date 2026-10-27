@@ -5,7 +5,6 @@ import {BuilderStaticPanel} from '@thunderid/components';
 import {GatePreview} from '@thunderid/configure-design';
 import {DefaultTheme, DesignResolveType, useGetDesignResolve, type Theme} from '@thunderid/design';
 import {useTemplateLiteralResolver} from '@thunderid/hooks';
-import {useGetApplication, useGetApplications} from '@thunderid/react';
 import type {BasicApplication, EmbeddedFlowComponent} from '@thunderid/react';
 import {
   Box,
@@ -37,6 +36,8 @@ import {useCallback, useEffect, useMemo, useRef, useState, type ReactElement} fr
 import {useTranslation} from 'react-i18next';
 import SimulationOptionsFooter from './SimulationOptionsFooter';
 import SimulationScreenSketch from './SimulationScreenSketch';
+import useGetPreviewApplication from '../../api/useGetPreviewApplication';
+import useGetPreviewApplications from '../../api/useGetPreviewApplications';
 import {
   DEVICE_ASPECT_RATIOS,
   DEVICE_LABEL_FALLBACKS,
@@ -110,7 +111,7 @@ export default function SimulationStepPreview({node, simulation}: SimulationStep
   });
   const [previewColorScheme, setPreviewColorScheme] = useState<'light' | 'dark'>(consoleScheme);
 
-  const {data: applicationsData} = useGetApplications();
+  const {data: applicationsData} = useGetPreviewApplications();
   const applications = useMemo(() => applicationsData?.applications ?? [], [applicationsData]);
   // The preview opens themed as the built-in Console application by default —
   // there is no unthemed option, matching what an end user would actually see.
@@ -120,7 +121,7 @@ export default function SimulationStepPreview({node, simulation}: SimulationStep
   );
   const isKnownApp = applications.some((application: BasicApplication) => application.id === selectedAppId);
   const effectiveAppId = selectedAppId && isKnownApp ? selectedAppId : defaultAppId;
-  const {data: selectedApplication} = useGetApplication(effectiveAppId);
+  const {data: selectedApplication} = useGetPreviewApplication(effectiveAppId);
   // The gate's own design resolution for the application. Responds 404 when the
   // application has no design configured at all — the gate then falls back to
   // the renderer's built-in default design, and so does the preview.

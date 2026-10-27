@@ -2,77 +2,45 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import AgentQueryKeys from '../../constants/agent-query-keys';
 import type {AgentListResponse} from '../../models/agent';
 import useGetAgents from '../useGetAgents';
 
-vi.mock('@thunderid/react', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@thunderid/react')>()),
-  useThunderID: vi.fn(),
+const {config, mockGetAgents} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetAgents: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: vi.fn(),
-  };
-});
-
-const {useThunderID} = await import('@thunderid/react');
-const {useConfig} = await import('@thunderid/contexts');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getAgents: mockGetAgents}));
 
 describe('useGetAgents', () => {
-  let mockHttpRequest: ReturnType<typeof vi.fn>;
-
-  const mockResponse: AgentListResponse = {
+  const response: AgentListResponse = {
     totalResults: 2,
-    startIndex: 1,
+    startIndex: 0,
     count: 2,
     agents: [
-      {
-        id: '550e8400-e29b-41d4-a716-446655440000',
-        ouId: '111e8400-e29b-41d4-a716-446655440000',
-        type: 'default',
-        display: 'Billing Service',
-      },
-      {
-        id: '660e8400-e29b-41d4-a716-446655440001',
-        ouId: '111e8400-e29b-41d4-a716-446655440000',
-        type: 'default',
-        display: 'Reports Service',
-      },
+      {id: 'agent-1', ouId: 'ou-1', type: 'default', display: 'Agent 1'},
+      {id: 'agent-2', ouId: 'ou-1', type: 'default', display: 'Agent 2'},
     ],
   };
 
   beforeEach(() => {
-    mockHttpRequest = vi.fn();
-
-    vi.mocked(useThunderID).mockReturnValue({
-      http: {request: mockHttpRequest},
-    } as unknown as ReturnType<typeof useThunderID>);
-
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: () => 'https://api.test.com',
-    } as ReturnType<typeof useConfig>);
+    mockGetAgents.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should initialize with loading state', () => {
-    mockHttpRequest.mockReturnValue(new Promise(() => null));
+  it('should start in the loading state', () => {
+    mockGetAgents.mockReturnValue(new Promise(() => null));
 
     const {result} = renderHook(() => useGetAgents());
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toBeNull();
   });
 
-  it('should successfully fetch agents list with default pagination', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockResponse});
+  it('should load the first page through the SDK with the management config', async () => {
+    mockGetAgents.mockResolvedValueOnce(response);
 
     const {result} = renderHook(() => useGetAgents());
 
@@ -80,34 +48,26 @@ describe('useGetAgents', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockResponse);
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/agents?limit=30&offset=0&include=display',
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(response);
+    expect(mockGetAgents).toHaveBeenCalledWith({...config, limit: 30, offset: 0});
   });
 
-  it('should pass custom pagination params', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockResponse});
+  it('should pass the paging params through and cache each page under its own key', async () => {
+    mockGetAgents.mockResolvedValueOnce(response);
 
-    const {result} = renderHook(() => useGetAgents({limit: 50, offset: 100}));
+    const {result, queryClient} = renderHook(() => useGetAgents({limit: 10, offset: 20}));
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/agents?limit=50&offset=100&include=display',
-      }),
-    );
+    expect(mockGetAgents).toHaveBeenCalledWith({...config, limit: 10, offset: 20});
+    expect(queryClient.getQueryData([AgentQueryKeys.AGENTS, {limit: 10, offset: 20}])).toEqual(response);
   });
 
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to load agents');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Failed to fetch agents');
+    mockGetAgents.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useGetAgents());
 
@@ -115,20 +75,6 @@ describe('useGetAgents', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
-  });
-
-  it('should return empty list when no agents exist', async () => {
-    const emptyResponse: AgentListResponse = {totalResults: 0, startIndex: 1, count: 0, agents: []};
-    mockHttpRequest.mockResolvedValueOnce({data: emptyResponse});
-
-    const {result} = renderHook(() => useGetAgents());
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(emptyResponse);
-    expect(result.current.data?.agents).toHaveLength(0);
+    expect(result.current.error).toBe(error);
   });
 });

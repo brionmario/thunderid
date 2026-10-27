@@ -67,7 +67,10 @@ export default function getApplicationErrorMessage(
     return backchannelLogoutUriError;
   }
 
-  const apiError = (error as {response?: {data?: FlowMismatchApiError}}).response?.data;
+  // An HTTP client error carries the server's envelope as its response body; an SDK API error
+  // (`ThunderIDAPIError`) carries it as `serverError`.
+  const candidate = error as {response?: {data?: FlowMismatchApiError}; serverError?: FlowMismatchApiError};
+  const apiError = candidate.response?.data ?? candidate.serverError;
 
   if (apiError?.code === FLOW_MISMATCH_ERROR_CODE) {
     const sourceFlowType = apiError.description?.params?.sourceFlowType?.toLowerCase();

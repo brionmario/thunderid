@@ -31,7 +31,10 @@ export default function getBackchannelLogoutUriServerError(
   error: Error,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): string | undefined {
-  const descriptionKey = (error as {response?: {data?: ApiErrorWithDescriptionKey}}).response?.data?.description?.key;
+  // An HTTP client error carries the server's envelope as its response body; an SDK API error
+  // (`ThunderIDAPIError`) carries it as `serverError`.
+  const candidate = error as {response?: {data?: ApiErrorWithDescriptionKey}; serverError?: ApiErrorWithDescriptionKey};
+  const descriptionKey = (candidate.response?.data ?? candidate.serverError)?.description?.key;
 
   if (!descriptionKey?.includes(FIELD_DESCRIPTION_KEY_PART)) {
     return undefined;

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {previewCimdDocument} from '@thunderid/react';
 import type {CimdPreview, CimdPreviewResponse} from '../models/cimd';
 import toCimdPreview from '../utils/toCimdPreview';
 
@@ -14,21 +14,10 @@ import toCimdPreview from '../utils/toCimdPreview';
  * @public
  */
 export default function usePreviewCimdDocument(): UseMutationResult<CimdPreview, Error, string> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
 
   return useMutation<CimdPreview, Error, string>({
-    mutationFn: async (clientId: string): Promise<CimdPreview> => {
-      const response: {data: CimdPreviewResponse} = await http.request({
-        url: `${getServerUrl()}/cimd/preview`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: {clientId},
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return toCimdPreview(response.data);
-    },
+    mutationFn: async (clientId: string): Promise<CimdPreview> =>
+      toCimdPreview((await previewCimdDocument({...config, clientId})) as unknown as CimdPreviewResponse),
   });
 }

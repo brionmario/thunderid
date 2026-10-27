@@ -3,6 +3,7 @@
 
 import userEvent from '@testing-library/user-event';
 import {render, screen, waitFor} from '@thunderid/test-utils';
+import type {ReactNode} from 'react';
 import type {NavigateFunction} from 'react-router';
 import {describe, it, expect, beforeEach, vi} from 'vitest';
 import type {RoleListResponse} from '../../models/role';
@@ -13,7 +14,37 @@ const {mockLoggerError} = vi.hoisted(() => ({
 }));
 
 // Mock the dependencies
-vi.mock('../../api/useGetRoles');
+const {mockUseGetRoles} = vi.hoisted(() => ({mockUseGetRoles: vi.fn<() => Record<string, unknown>>()}));
+
+vi.mock('../../api/useGetRoles', () => ({
+  default: () => ({refetch: vi.fn().mockResolvedValue(undefined), ...mockUseGetRoles()}),
+}));
+
+// The SDK's BaseRoleList renders through its own provider; this stand-in hands its render props
+// straight to the Console's render function, which is what these tests cover.
+vi.mock('@thunderid/react', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/react')>()),
+  BaseRoleList: ({
+    children,
+    error = null,
+    isLoading = false,
+    limit = 10,
+    offset = 0,
+    onPageChange = undefined,
+    roles,
+    totalResults = 0,
+  }: {
+    children: (props: object) => ReactNode;
+    error?: string | null;
+    isLoading?: boolean;
+    limit?: number;
+    offset?: number;
+    onPageChange?: (offset: number) => void;
+    roles: unknown[];
+    totalResults?: number;
+  }): ReactNode => children({error, isLoading, limit, offset, onPageChange, rows: roles, totalResults}),
+}));
+
 vi.mock('react-router', async () => {
   const actual = await vi.importActual('react-router');
   return {
@@ -126,7 +157,6 @@ vi.mock('@thunderid/logger/react', () => ({
   }),
 }));
 
-const {default: useGetRoles} = await import('../../api/useGetRoles');
 const {useNavigate} = await import('react-router');
 const {useDataGridLocaleText} = await import('@thunderid/hooks');
 
@@ -163,11 +193,11 @@ describe('RolesList', () => {
   const renderComponent = () => render(<RolesList />);
 
   it('should pass loading=true to ListingTable.Provider while fetching', () => {
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: undefined,
       isLoading: true,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -179,11 +209,11 @@ describe('RolesList', () => {
 
   it('should render error state', () => {
     const error = new Error('Network error');
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: undefined,
       isLoading: false,
       error,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -193,11 +223,11 @@ describe('RolesList', () => {
   });
 
   it('should render roles list successfully', () => {
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -207,11 +237,11 @@ describe('RolesList', () => {
   });
 
   it('should display "-" for missing description', () => {
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -222,11 +252,11 @@ describe('RolesList', () => {
   it('should open delete dialog when clicking Delete action', async () => {
     const user = userEvent.setup();
 
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -241,11 +271,11 @@ describe('RolesList', () => {
   it('should close delete dialog when cancelled', async () => {
     const user = userEvent.setup();
 
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -267,11 +297,11 @@ describe('RolesList', () => {
   it('should navigate when clicking row', async () => {
     const user = userEvent.setup();
 
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -287,11 +317,11 @@ describe('RolesList', () => {
   it('should navigate when clicking Edit action button', async () => {
     const user = userEvent.setup();
 
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -305,7 +335,7 @@ describe('RolesList', () => {
   });
 
   it('should render no rows when roles list is empty', () => {
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: {
         totalResults: 0,
         startIndex: 0,
@@ -314,7 +344,7 @@ describe('RolesList', () => {
       },
       isLoading: false,
       error: null,
-    } as unknown as ReturnType<typeof useGetRoles>);
+    } as unknown);
 
     renderComponent();
 
@@ -325,11 +355,11 @@ describe('RolesList', () => {
   it('should navigate to correct role when clicking different row', async () => {
     const user = userEvent.setup();
 
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 
@@ -347,11 +377,11 @@ describe('RolesList', () => {
     const navigationError = new Error('Navigation failed');
     mockNavigate.mockRejectedValueOnce(navigationError);
 
-    vi.mocked(useGetRoles).mockReturnValue({
+    mockUseGetRoles.mockReturnValue({
       data: mockRolesData,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGetRoles>);
+    });
 
     renderComponent();
 

@@ -2,90 +2,57 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import AgentQueryKeys from '../../constants/agent-query-keys';
 import type {Agent} from '../../models/agent';
 import useGetAgent from '../useGetAgent';
 
-vi.mock('@thunderid/react', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@thunderid/react')>()),
-  useThunderID: vi.fn(),
+const {config, mockGetAgent} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetAgent: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: vi.fn(),
-  };
-});
-
-const {useThunderID} = await import('@thunderid/react');
-const {useConfig} = await import('@thunderid/contexts');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getAgent: mockGetAgent}));
 
 describe('useGetAgent', () => {
-  let mockHttpRequest: ReturnType<typeof vi.fn>;
-
-  const mockAgent: Agent = {
-    id: '550e8400-e29b-41d4-a716-446655440000',
-    ouId: '111e8400-e29b-41d4-a716-446655440000',
-    type: 'default',
-    display: 'Billing Service',
-    description: 'Service-to-service billing agent',
-  };
+  const agent: Agent = {id: 'agent-1', ouId: 'ou-1', type: 'default', display: 'Billing Service'};
 
   beforeEach(() => {
-    mockHttpRequest = vi.fn();
-
-    vi.mocked(useThunderID).mockReturnValue({
-      http: {request: mockHttpRequest},
-    } as unknown as ReturnType<typeof useThunderID>);
-
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: () => 'https://api.test.com',
-    } as ReturnType<typeof useConfig>);
+    mockGetAgent.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should load through the SDK with the management config', async () => {
+    mockGetAgent.mockResolvedValueOnce(agent);
 
-  it('should not fetch when agentId is empty', () => {
-    mockHttpRequest.mockReturnValue(new Promise(() => null));
-
-    const {result} = renderHook(() => useGetAgent(''));
-
-    expect(result.current.isLoading).toBe(false);
-    expect(mockHttpRequest).not.toHaveBeenCalled();
-  });
-
-  it('should fetch agent by ID', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockAgent});
-
-    const {result} = renderHook(() => useGetAgent(mockAgent.id));
+    const {result, queryClient} = renderHook(() => useGetAgent('agent-1'));
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockAgent);
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: `https://api.test.com/agents/${mockAgent.id}?include=display`,
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(agent);
+    expect(mockGetAgent).toHaveBeenCalledWith({...config, agentId: 'agent-1'});
+    expect(queryClient.getQueryData([AgentQueryKeys.AGENT, 'agent-1'])).toEqual(agent);
   });
 
-  it('should handle API error', async () => {
-    const apiError = new Error('Agent not found');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should not fetch until an id is known', () => {
+    const {result} = renderHook(() => useGetAgent(''));
 
-    const {result} = renderHook(() => useGetAgent(mockAgent.id));
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGetAgent).not.toHaveBeenCalled();
+  });
+
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Not found');
+    mockGetAgent.mockRejectedValueOnce(error);
+
+    const {result} = renderHook(() => useGetAgent('agent-1'));
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
+    expect(result.current.error).toBe(error);
   });
 });

@@ -13,6 +13,8 @@ import EditTokenSettings from '../EditTokenSettings';
 // inside the hoisted vi.mock factory functions below. Without stable references,
 // useThunderID/useConfig/useLogger return new object identities on every render,
 // causing fetchSchemas' useEffect to re-fire every render → infinite loop → OOM.
+const managementApiConfig = vi.hoisted(() => ({baseUrl: 'https://api.example.com'}));
+
 const {mockHttp, mockGetServerUrl, mockLogger} = vi.hoisted(() => {
   const hoistedMockHttp = {
     request: vi.fn().mockResolvedValue({
@@ -195,13 +197,23 @@ vi.mock('../TokenValidationSection', () => ({
   },
 }));
 
-// Mock useThunderID — stable mockHttp reference prevents fetchSchemas effect from
-// re-firing on every render (http is in the effect's dependency array).
+// The SDK reads each user type through the management config's fetcher; route it through the same
+// request mock. A stable config keeps fetchSchemas' effect from re-firing on every render.
+vi.mock('@thunderid/components', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/components')>()),
+  useManagementApiConfig: () => managementApiConfig,
+}));
+
 vi.mock('@thunderid/react', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@thunderid/react')>()),
-  useThunderID: () => ({
-    http: mockHttp,
-  }),
+  getUserTypes: async (): Promise<unknown> =>
+    ((await mockHttp.request({url: 'https://api.example.com/user-types', method: 'GET'})) as {data: unknown}).data,
+  getUserType: async ({userTypeId}: {userTypeId: string}): Promise<unknown> =>
+    (
+      (await mockHttp.request({url: `https://api.example.com/user-types/${userTypeId}`, method: 'GET'})) as {
+        data: unknown;
+      }
+    ).data,
 }));
 
 // Mock useConfig — stable mockGetServerUrl reference (also in fetchSchemas deps).

@@ -2,15 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {AdministrationModes, useAdministrationOperation, useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {deleteApplication} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import ApplicationQueryKeys from '../constants/application-query-keys';
-import {
-  deleteApplicationNatively,
-  deleteApplicationViaFlow,
-  type HttpLike,
-} from '../utils/applicationAdministrationFlow';
 
 /**
  * Custom React hook to delete an application from the server.
@@ -19,10 +15,6 @@ import {
  * providing loading states and error handling. Upon successful deletion, it automatically
  * removes the application from cache and invalidates the applications list query to
  * trigger a refetch.
- *
- * The deletion runs through the configured administration flow, which revokes the application's
- * tokens and detaches its sessions before the record is removed. It falls back to
- * `DELETE /applications/{id}` when no such flow is configured.
  *
  * @returns TanStack Query mutation object for deleting applications with mutate function, loading state, and error information
  *
@@ -55,26 +47,14 @@ import {
  * @public
  */
 export default function useDeleteApplication(): UseMutationResult<void, Error, string> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('applications');
   const {showToast} = useToast();
-  const mode = useAdministrationOperation<[string], void>('applications', 'delete');
 
   return useMutation<void, Error, string>({
     mutationFn: async (applicationId: string): Promise<void> => {
-      const client = http as unknown as HttpLike;
-
-      if (typeof mode === 'function') {
-        await mode(applicationId);
-        return;
-      }
-      if (mode === AdministrationModes.NATIVE) {
-        await deleteApplicationNatively(client, getServerUrl(), applicationId);
-        return;
-      }
-      await deleteApplicationViaFlow(client, getServerUrl(), applicationId);
+      await deleteApplication({...config, applicationId});
     },
     onSuccess: (_data, applicationId) => {
       // Remove the specific application from cache

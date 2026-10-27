@@ -4,9 +4,10 @@
 import {AccessStatusIndicator, QueryErrorNotice, ResourceAvatar, getInitials} from '@thunderid/components';
 import {useDataGridLocaleText} from '@thunderid/hooks';
 import {useLogger} from '@thunderid/logger/react';
+import {BaseUserList, type AdminListRenderProps, type ManagedUser} from '@thunderid/react';
 import {IconButton, Tooltip, Typography, ListingTable, DataGrid} from '@wso2/oxygen-ui';
 import {Eye, Pencil, Trash2} from '@wso2/oxygen-ui-icons-react';
-import {useMemo, useState, useCallback} from 'react';
+import {useMemo, useState, useCallback, type JSX} from 'react';
 import {useTranslation} from 'react-i18next';
 import {useNavigate} from 'react-router';
 import UserDeleteDialog from './UserDeleteDialog';
@@ -22,7 +23,9 @@ export default function UsersList() {
   const dataGridLocaleText = useDataGridLocaleText();
   const routes = useUserRoutes();
 
-  const {data: userData, isLoading, error, refetch} = useGetUsers();
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [offset, setOffset] = useState<number>(0);
+  const usersQuery = useGetUsers({limit: pageSize, offset});
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -158,33 +161,49 @@ export default function UsersList() {
     [handleDeleteClick, handleEditClick, t],
   );
 
-  if (error) {
-    return (
-      <QueryErrorNotice
-        error={error}
-        t={t}
-        variant="block"
-        title={t('users:listing.error', 'Failed to load users')}
-        onRetry={() => void refetch()}
-      />
-    );
-  }
+  const renderList = ({
+    isLoading,
+    limit,
+    onPageChange,
+    rows,
+    totalResults,
+  }: AdminListRenderProps<ManagedUser>): JSX.Element => {
+    if (usersQuery.error) {
+      return (
+        <QueryErrorNotice
+          error={usersQuery.error}
+          t={t}
+          variant="block"
+          title={t('users:listing.error', 'Failed to load users')}
+          onRetry={() => {
+            usersQuery.refetch().catch((_error: unknown) => {
+              logger.error('Failed to reload users', {error: _error});
+            });
+          }}
+        />
+      );
+    }
 
-  return (
-    <>
+    return (
       <ListingTable.Provider variant="data-grid-card" loading={isLoading}>
         <ListingTable.Container disablePaper>
           <ListingTable.DataGrid
-            rows={userData?.users ?? []}
+            rows={rows as UserWithDetails[]}
             columns={columns}
             getRowId={(row) => (row as UserWithDetails).id}
             onRowClick={(params) => {
               handleEditClick((params.row as UserWithDetails).id);
             }}
-            initialState={{
-              pagination: {
-                paginationModel: {pageSize: 10},
-              },
+            paginationMode="server"
+            rowCount={totalResults}
+            paginationModel={{page: Math.floor(offset / limit), pageSize: limit}}
+            onPaginationModelChange={(model: DataGrid.GridPaginationModel) => {
+              if (model.pageSize !== limit) {
+                setPageSize(model.pageSize);
+                onPageChange?.(0);
+                return;
+              }
+              onPageChange?.(model.page * limit);
             }}
             pageSizeOptions={[5, 10, 25, 50]}
             disableRowSelectionOnClick
@@ -200,6 +219,22 @@ export default function UsersList() {
           />
         </ListingTable.Container>
       </ListingTable.Provider>
+    );
+  };
+
+  return (
+    <>
+      <BaseUserList
+        users={(usersQuery.data?.users ?? []) as ManagedUser[]}
+        totalResults={usersQuery.data?.totalResults ?? 0}
+        limit={pageSize}
+        offset={offset}
+        onPageChange={setOffset}
+        isLoading={usersQuery.isLoading}
+        error={usersQuery.error?.message ?? null}
+      >
+        {renderList}
+      </BaseUserList>
 
       {/* Delete Confirmation Dialog */}
       <UserDeleteDialog open={deleteDialogOpen} userId={selectedUserId} onClose={handleDeleteCancel} />

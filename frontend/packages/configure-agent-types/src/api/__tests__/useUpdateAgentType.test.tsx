@@ -2,103 +2,76 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import AgentTypeQueryKeys from '../../constants/agentTypeQueryKeys';
-import type {ApiAgentType} from '../../models/agent-type';
 import type {UpdateAgentTypeRequest} from '../../models/requests';
 import useUpdateAgentType from '../useUpdateAgentType';
 
-const mockHttpRequest = vi.fn();
-const mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockUpdateAgentType, mockShowToast} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockUpdateAgentType: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-    useToast: vi.fn().mockReturnValue({showToast: vi.fn()}),
-  };
-});
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({updateAgentType: mockUpdateAgentType}));
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useToast: () => ({showToast: mockShowToast}),
+}));
 
 describe('useUpdateAgentType', () => {
-  const agentTypeId = 'aaa-bbb-ccc';
-  const ouId = '111e8400-e29b-41d4-a716-446655440000';
-
-  const mockAgentType: ApiAgentType = {
-    id: agentTypeId,
-    handle: 'default',
+  const data: UpdateAgentTypeRequest = {
     displayName: 'Default',
-    ouId,
-    schema: {model: {type: 'string', required: false}},
+    ouId: 'ou-1',
+    schema: {name: {type: 'string', required: true}},
   };
-
-  const mockRequest: UpdateAgentTypeRequest = {
-    displayName: 'Default',
-    ouId,
-    schema: {model: {type: 'string', required: false}},
-  };
+  const updated = {id: 'type-1', handle: 'default', ...data};
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReset().mockReturnValue('https://api.test.com');
+    mockUpdateAgentType.mockReset();
+    mockShowToast.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should successfully update an agent type', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockAgentType});
+  it('should update the agent type through the SDK with the management config', async () => {
+    mockUpdateAgentType.mockResolvedValueOnce(updated);
 
     const {result} = renderHook(() => useUpdateAgentType());
-    result.current.mutate({agentTypeId, data: mockRequest});
+
+    await expect(result.current.mutateAsync({agentTypeId: 'type-1', data})).resolves.toEqual(updated);
+    expect(mockUpdateAgentType).toHaveBeenCalledWith({...config, agentTypeId: 'type-1', payload: data});
+  });
+
+  it('should refresh the agent type and the list, and confirm with a toast', async () => {
+    mockUpdateAgentType.mockResolvedValueOnce(updated);
+
+    const {result, queryClient} = renderHook(() => useUpdateAgentType());
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    result.current.mutate({agentTypeId: 'type-1', data});
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockAgentType);
-    expect(mockHttpRequest).toHaveBeenCalledWith({
-      url: `https://api.test.com/agent-types/${agentTypeId}`,
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      data: mockRequest,
-    });
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [AgentTypeQueryKeys.AGENT_TYPE, 'type-1']});
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [AgentTypeQueryKeys.AGENT_TYPES]});
+    expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
-  it('should handle API error', async () => {
-    const apiError = new Error('Update failed');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should surface the error without a toast', async () => {
+    const error = new Error('Invalid schema');
+    mockUpdateAgentType.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useUpdateAgentType());
-    result.current.mutate({agentTypeId, data: mockRequest});
+
+    result.current.mutate({agentTypeId: 'type-1', data});
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
-  });
-
-  it('should invalidate single agent-type and list queries on success', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockAgentType});
-
-    const {result, queryClient} = renderHook(() => useUpdateAgentType());
-    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    result.current.mutate({agentTypeId, data: mockRequest});
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(invalidateQueriesSpy).toHaveBeenCalledWith({queryKey: [AgentTypeQueryKeys.AGENT_TYPE, agentTypeId]});
-    expect(invalidateQueriesSpy).toHaveBeenCalledWith({queryKey: [AgentTypeQueryKeys.AGENT_TYPES]});
+    expect(result.current.error).toBe(error);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

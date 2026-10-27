@@ -32,7 +32,20 @@ describe('getUserErrorMessage', () => {
     ).toBe('Failed to delete user. Please try again.');
   });
 
-  it('should resolve a code reported at error.code (flow envelope)', () => {
+  it('should interpolate the dependencies param for USR-1027 carried as an SDK serverError', () => {
+    // An SDK API error also carries a code of its own, which must not shadow the server's.
+    const error = Object.assign(new Error('request failed'), {
+      code: 'deleteUser-ResponseError-001',
+      serverError: {code: 'USR-1027', description: {params: {dependencies: '1 agent(s)'}}},
+    });
+    const t = vi.fn((key: string, options?: {dependencies?: string}) =>
+      key === 'errors.USR-1027' ? `Blocked by ${options?.dependencies}.` : '',
+    );
+
+    expect(getUserErrorMessage(error, t, 'delete.error')).toBe('Blocked by 1 agent(s).');
+  });
+
+  it('should resolve a code reported at the top level of the error', () => {
     const error = Object.assign(new Error('flow failed'), {code: 'USR-1014'});
     const t = vi.fn((key: string) =>
       key === 'errors.USR-1014' ? 'A user with the same unique attribute value already exists.' : '',
@@ -43,46 +56,7 @@ describe('getUserErrorMessage', () => {
     );
   });
 
-  it('should resolve a code reported at error.error.code (flow envelope)', () => {
-    const error = Object.assign(new Error('flow failed'), {error: {code: 'USR-1019'}});
-    const t = vi.fn((key: string) =>
-      key === 'errors.USR-1019' ? "Some attributes no longer match this user type's schema." : '',
-    );
-
-    expect(getUserErrorMessage(error, t, 'create.error')).toBe(
-      "Some attributes no longer match this user type's schema.",
-    );
-  });
-
-  it('should interpolate params carried by a flow envelope message', () => {
-    const error = Object.assign(new Error('flow failed'), {
-      error: {
-        code: 'FET-1061',
-        message: {key: 'flows.executor.errors.attribute_not_unique', params: {attribute: 'email'}},
-      },
-    });
-    const t = vi.fn((key: string, options?: {attribute?: string; defaultValue?: string}) =>
-      key === 'common:errors.FET-1061' ? `A user already exists with the provided ${options?.attribute}.` : '',
-    );
-
-    expect(getUserErrorMessage(error, t, 'create.error')).toBe('A user already exists with the provided email.');
-  });
-
-  it('should read flow envelope params from the description when the message carries none', () => {
-    const error = Object.assign(new Error('flow failed'), {
-      error: {
-        code: 'FET-1061',
-        description: {key: 'flows.executor.errors.attribute_not_unique_desc', params: {attribute: 'mobileNumber'}},
-      },
-    });
-    const t = vi.fn((key: string, options?: {attribute?: string; defaultValue?: string}) =>
-      key === 'common:errors.FET-1061' ? `A user already exists with the provided ${options?.attribute}.` : '',
-    );
-
-    expect(getUserErrorMessage(error, t, 'create.error')).toBe('A user already exists with the provided mobileNumber.');
-  });
-
-  it('should resolve a flow-shaped code from the shared catalog when the feature namespace has no entry', () => {
+  it('should resolve a top-level code from the shared catalog when the feature namespace has no entry', () => {
     const error = Object.assign(new Error('flow failed'), {code: 'SSE-4030'});
     const t = vi.fn((key: string) =>
       key === 'common:errors.SSE-4030'

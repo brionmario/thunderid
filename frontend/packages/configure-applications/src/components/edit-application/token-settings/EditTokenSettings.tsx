@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {zodResolver} from '@hookform/resolvers/zod';
+import {useManagementApiConfig} from '@thunderid/components';
 import type {PropertyDefinition, ApiUserType} from '@thunderid/configure-user-types';
 import {useGetUserTypes} from '@thunderid/configure-user-types';
-import {useConfig, useRuntimeUrl} from '@thunderid/contexts';
+import {useRuntimeUrl} from '@thunderid/contexts';
 import {useLogger} from '@thunderid/logger';
-import {useThunderID} from '@thunderid/react';
+import {getUserType} from '@thunderid/react';
 import {Stack} from '@wso2/oxygen-ui';
 import {useState, useEffect, useMemo, useRef} from 'react';
 import {useForm, useWatch} from 'react-hook-form';
@@ -175,8 +176,7 @@ export default function EditTokenSettings({
 }: EditTokenSettingsProps) {
   const logger = useLogger('EditTokenSettings');
   const {t} = useTranslation();
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const managementApiConfig = useManagementApiConfig();
   const runtimeUrl = useRuntimeUrl();
 
   const [userTypes, setUserTypes] = useState<ApiUserType[]>([]);
@@ -356,16 +356,10 @@ export default function EditTokenSettings({
     if (schemaIds.length === 0) return;
 
     const fetchSchemas = async () => {
-      const serverUrl = getServerUrl();
-
       try {
         const schemaPromises = schemaIds.map(async (id) => {
           try {
-            const response = await http.request({
-              url: `${serverUrl}/user-types/${id}`,
-              method: 'GET',
-            } as unknown as Parameters<typeof http.request>[0]);
-            return response.data as ApiUserType;
+            return (await getUserType({...managementApiConfig, userTypeId: id})) as unknown as ApiUserType;
           } catch (err) {
             logger.error('Failed to fetch user type', {error: err, userTypeId: id});
             return null;
@@ -384,7 +378,7 @@ export default function EditTokenSettings({
     fetchSchemas().catch((err) => {
       logger.error('Unexpected error in fetchUserTypes', {error: err});
     });
-  }, [schemaIds, http, getServerUrl, logger]);
+  }, [schemaIds, managementApiConfig, logger]);
 
   /**
    * Fetch the signing algorithm from the runtime's OIDC discovery document. Signing is done with

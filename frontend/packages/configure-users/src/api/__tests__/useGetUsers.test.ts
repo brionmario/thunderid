@@ -2,35 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import UserQueryKeys from '../../constants/user-query-keys';
 import type {UserListResponse} from '../../models/users';
 import useGetUsers from '../useGetUsers';
 
-const mockHttpRequest = vi.fn();
-const mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-
-// Mock the dependencies
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {
-      request: mockHttpRequest,
-    },
-  }),
+const {config, mockGetUsers} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetUsers: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({
-      getServerUrl: mockGetServerUrl,
-    }),
-  };
-});
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getUsers: mockGetUsers}));
 
 describe('useGetUsers', () => {
-  const mockUserListResponse: UserListResponse = {
+  const response: UserListResponse = {
     totalResults: 2,
     startIndex: 0,
     count: 2,
@@ -41,28 +27,20 @@ describe('useGetUsers', () => {
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReset().mockReturnValue('https://api.test.com');
+    mockGetUsers.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should initialize with loading state', () => {
-    mockHttpRequest.mockReturnValue(new Promise(() => null)); // Never resolves
+  it('should start in the loading state', () => {
+    mockGetUsers.mockReturnValue(new Promise(() => null));
 
     const {result} = renderHook(() => useGetUsers());
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toBeNull();
   });
 
-  it('should successfully fetch users list', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
+  it('should load the users through the SDK with the management config', async () => {
+    mockGetUsers.mockResolvedValueOnce(response);
 
     const {result} = renderHook(() => useGetUsers());
 
@@ -70,69 +48,39 @@ describe('useGetUsers', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockUserListResponse);
-    expect(result.current.data?.users).toHaveLength(2);
-    expect(result.current.data?.totalResults).toBe(2);
-    expect(result.current.data?.count).toBe(2);
+    expect(result.current.data).toEqual(response);
+    expect(mockGetUsers).toHaveBeenCalledWith({...config, filter: undefined, limit: undefined, offset: undefined});
   });
 
-  it('should fetch users without query parameters when no params provided', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
+  it('should pass the paging and filter params through', async () => {
+    mockGetUsers.mockResolvedValueOnce(response);
 
-    renderHook(() => useGetUsers());
+    const {result} = renderHook(() => useGetUsers({filter: 'username eq "john"', limit: 10, offset: 20}));
 
     await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toBe('https://api.test.com/users?include=display');
+    expect(mockGetUsers).toHaveBeenCalledWith({...config, filter: 'username eq "john"', limit: 10, offset: 20});
   });
 
-  it('should use custom pagination parameters', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
+  it('should cache each page under its own key', async () => {
+    mockGetUsers.mockResolvedValue(response);
 
-    renderHook(() => useGetUsers({limit: 10, offset: 5}));
+    const {result, queryClient} = renderHook(() => useGetUsers({limit: 10, offset: 10}));
 
     await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toContain('limit=10');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toContain('offset=5');
+    expect(
+      queryClient.getQueryData([UserQueryKeys.USERS, {limit: 10, offset: 10, filter: undefined}]),
+    ).toEqual(response);
   });
 
-  it('should use filter parameter', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
-
-    renderHook(() => useGetUsers({filter: 'name eq "John"'}));
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const url = callArgs.url as string;
-    expect(url).toContain('filter=');
-  });
-
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to fetch users');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Failed to fetch users');
+    mockGetUsers.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useGetUsers());
 
@@ -140,212 +88,6 @@ describe('useGetUsers', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
-    expect(result.current.data).toBeUndefined();
-  });
-
-  it('should handle network error', async () => {
-    const networkError = new Error('Network request failed');
-    mockHttpRequest.mockRejectedValueOnce(networkError);
-
-    const {result} = renderHook(() => useGetUsers());
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toEqual(networkError);
-  });
-
-  it('should use correct server URL from config', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
-
-    renderHook(() => useGetUsers());
-
-    await waitFor(() => {
-      expect(mockGetServerUrl).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toContain('https://api.test.com/users');
-  });
-
-  it('should include correct headers', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
-
-    renderHook(() => useGetUsers());
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.method).toBe('GET');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.headers['Content-Type']).toBe('application/json');
-  });
-
-  it('should use correct query key with pagination params', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
-
-    const {result, queryClient} = renderHook(() => useGetUsers({limit: 20, offset: 10}));
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    const cache = queryClient.getQueryCache();
-    const queries = cache.findAll({
-      queryKey: [UserQueryKeys.USERS, {limit: 20, offset: 10, filter: undefined}],
-    });
-
-    expect(queries).toHaveLength(1);
-  });
-
-  it('should cache results for same parameters', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
-
-    // First call - get the queryClient from the render result
-    const {result: result1, queryClient} = renderHook(() => useGetUsers({limit: 10, offset: 0}));
-
-    await waitFor(() => {
-      expect(result1.current.isSuccess).toBe(true);
-    });
-
-    // Set the data as fresh to prevent refetch
-    queryClient.setQueryDefaults([UserQueryKeys.USERS, {limit: 10, offset: 0, filter: undefined}], {
-      staleTime: Infinity,
-    });
-
-    // Second call with same queryClient should use cache
-    const {result: result2} = renderHook(() => useGetUsers({limit: 10, offset: 0}), {
-      queryClient,
-    });
-
-    await waitFor(() => {
-      expect(result2.current.data).toEqual(mockUserListResponse);
-    });
-    expect(mockHttpRequest).toHaveBeenCalledTimes(1); // Should not make another request
-  });
-
-  it('should make new request for different parameters', async () => {
-    mockHttpRequest.mockResolvedValue({
-      data: mockUserListResponse,
-    });
-
-    const {result: result1} = renderHook(() => useGetUsers({limit: 10, offset: 0}));
-
-    await waitFor(() => {
-      expect(result1.current.isSuccess).toBe(true);
-    });
-
-    // Second call with different parameters should make new request
-    const {result: result2} = renderHook(() => useGetUsers({limit: 20, offset: 5}));
-
-    await waitFor(() => {
-      expect(result2.current.isSuccess).toBe(true);
-    });
-
-    expect(mockHttpRequest).toHaveBeenCalledTimes(2);
-  });
-
-  it('should support refetching data', async () => {
-    mockHttpRequest.mockResolvedValue({
-      data: mockUserListResponse,
-    });
-
-    const {result} = renderHook(() => useGetUsers());
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-
-    // Refetch the data
-    await result.current.refetch();
-
-    expect(mockHttpRequest).toHaveBeenCalledTimes(2);
-  });
-
-  it('should handle empty users list', async () => {
-    const emptyResponse: UserListResponse = {
-      totalResults: 0,
-      startIndex: 0,
-      count: 0,
-      users: [],
-    };
-
-    mockHttpRequest.mockResolvedValueOnce({
-      data: emptyResponse,
-    });
-
-    const {result} = renderHook(() => useGetUsers());
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(emptyResponse);
-    expect(result.current.data?.users).toHaveLength(0);
-    expect(result.current.data?.totalResults).toBe(0);
-  });
-
-  it('should properly construct query string with all parameters', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserListResponse,
-    });
-
-    renderHook(() => useGetUsers({limit: 15, offset: 30, filter: 'type eq "admin"'}));
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const url = callArgs.url as string;
-    expect(url).toContain('users?');
-    expect(url).toContain('limit=15');
-    expect(url).toContain('offset=30');
-    expect(url).toContain('filter=');
-  });
-
-  it('should maintain correct loading state during fetch', async () => {
-    let resolveRequest: (value: {data: UserListResponse}) => void;
-    const requestPromise = new Promise<{data: UserListResponse}>((resolve) => {
-      resolveRequest = resolve;
-    });
-
-    mockHttpRequest.mockReturnValueOnce(requestPromise);
-
-    const {result} = renderHook(() => useGetUsers());
-
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.isFetching).toBe(true);
-    expect(result.current.data).toBeUndefined();
-
-    resolveRequest!({data: mockUserListResponse});
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.isFetching).toBe(false);
-    expect(result.current.data).toEqual(mockUserListResponse);
+    expect(result.current.error).toBe(error);
   });
 });

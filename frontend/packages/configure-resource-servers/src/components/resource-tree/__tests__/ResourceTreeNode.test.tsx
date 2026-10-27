@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {renderWithProviders, screen, fireEvent, waitFor, userEvent} from '@thunderid/test-utils';
-import {FlowExecutionFailure} from '@thunderid/utils';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import type {Resource, Action, ResourceListResponse, ActionListResponse} from '../../../models/resource-server';
 import {ResourceNode, ActionNode} from '../ResourceTreeNode';
@@ -271,7 +270,9 @@ describe('ActionNode', () => {
   it('shows the reason a deletion flow refused the action', async () => {
     const user = userEvent.setup();
     mockDeleteAction.mockImplementation((_actionId: string, options: {onError: (error: Error) => void}) =>
-      options.onError(new FlowExecutionFailure({code: 'FET-1108'}, 'The action deletion flow did not complete')),
+      options.onError(
+        Object.assign(new Error('The action deletion flow did not complete'), {flowError: {code: 'FET-1108'}}),
+      ),
     );
     renderWithProviders(<ActionNode {...defaultProps} selectedNodeId={mockAction.id} />);
 

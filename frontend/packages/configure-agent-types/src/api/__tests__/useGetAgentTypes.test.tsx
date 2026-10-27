@@ -2,53 +2,42 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import AgentTypeQueryKeys from '../../constants/agentTypeQueryKeys';
 import type {AgentTypeListResponse} from '../../models/responses';
 import useGetAgentTypes from '../useGetAgentTypes';
 
-const mockHttpRequest = vi.fn();
-const mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockList} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockList: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getAgentTypes: mockList}));
 
 describe('useGetAgentTypes', () => {
-  const mockResponse: AgentTypeListResponse = {
+  const response: AgentTypeListResponse = {
     totalResults: 1,
     startIndex: 1,
     count: 1,
-    types: [
-      {
-        id: 'aaa-bbb-ccc',
-        handle: 'default',
-        displayName: 'Default',
-        ouId: '111e8400-e29b-41d4-a716-446655440000',
-      },
-    ],
+    types: [{id: 'type-1', handle: 'default', displayName: 'Default', ouId: 'ou-1', ouHandle: 'root'}],
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReset().mockReturnValue('https://api.test.com');
+    mockList.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
+  it('should start in the loading state', () => {
+    mockList.mockReturnValue(new Promise(() => null));
+
+    const {result} = renderHook(() => useGetAgentTypes());
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.data).toBeUndefined();
   });
 
-  it('should fetch agent types list with include=display', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockResponse});
+  it('should load through the SDK with the management config', async () => {
+    mockList.mockResolvedValueOnce(response);
 
     const {result} = renderHook(() => useGetAgentTypes());
 
@@ -56,34 +45,26 @@ describe('useGetAgentTypes', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockResponse);
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/agent-types?include=display',
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(response);
+    expect(mockList).toHaveBeenCalledWith({...config, limit: undefined, offset: undefined});
   });
 
-  it('should pass pagination params when supplied', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockResponse});
+  it('should pass the paging params through and cache each page under its own key', async () => {
+    mockList.mockResolvedValueOnce(response);
 
-    const {result} = renderHook(() => useGetAgentTypes({limit: 5, offset: 10}));
+    const {result, queryClient} = renderHook(() => useGetAgentTypes({limit: 10, offset: 20}));
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/agent-types?limit=5&offset=10&include=display',
-      }),
-    );
+    expect(mockList).toHaveBeenCalledWith({...config, limit: 10, offset: 20});
+    expect(queryClient.getQueryData([AgentTypeQueryKeys.AGENT_TYPES, {limit: 10, offset: 20}])).toEqual(response);
   });
 
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to load agent types');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Failed to fetch');
+    mockList.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useGetAgentTypes());
 
@@ -91,6 +72,13 @@ describe('useGetAgentTypes', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
+    expect(result.current.error).toBe(error);
+  });
+
+  it('should not fetch when disabled', () => {
+    const {result} = renderHook(() => useGetAgentTypes(undefined, {enabled: false}));
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockList).not.toHaveBeenCalled();
   });
 });

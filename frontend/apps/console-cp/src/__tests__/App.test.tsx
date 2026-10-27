@@ -38,22 +38,6 @@ vi.mock('@thunderid/configure-gateways', () => ({
   GatewayValuesPage: () => <div data-testid="gateway-values-page">Gateway Values Page</div>,
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
-  AdministrationProvider: ({
-    administration,
-    children,
-  }: {
-    administration: {mode?: string};
-    children: React.ReactNode;
-  }) => (
-    <>
-      <div data-testid="administration-mode">{administration.mode}</div>
-      {children}
-    </>
-  ),
-}));
-
 vi.mock('@thunderid/configure-user-types', () => ({
   UserTypeCreateProvider: ({children}: {children: React.ReactNode}) => children as React.ReactElement,
   UserTypesListPage: () => <div data-testid="user-types-list-page">User Types List Page</div>,
@@ -457,11 +441,6 @@ describe('App', () => {
       setTimeout(resolve, 50);
     });
     expect(screen.queryByTestId('tryout-mcp-page')).not.toBeInTheDocument();
-  });
-
-  it('runs every administration operation natively', () => {
-    render(<App />);
-    expect(screen.getByTestId('administration-mode')).toHaveTextContent('native');
   });
 
   it('loads GatewaysListPage lazily at /gateways', async () => {

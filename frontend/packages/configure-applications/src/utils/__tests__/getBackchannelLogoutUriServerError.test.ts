@@ -33,6 +33,17 @@ describe('getBackchannelLogoutUriServerError', () => {
     expect(message).toContain('The server refused the back-channel logout URI');
   });
 
+  it('reads the description key from the envelope an SDK API error carries', () => {
+    const error = Object.assign(new Error('Failed to update application'), {
+      serverError: {
+        code: 'APP-1024',
+        description: {key: 'error.applicationservice.backchannel_logout_uri_requires_https_description'},
+      },
+    });
+
+    expect(getBackchannelLogoutUriServerError(error, t)).toContain('serverRequiresHttps');
+  });
+
   it.each([
     ['another OAuth configuration error', apiError('error.applicationservice.invalid_grant_type_description')],
     ['an error without a description', apiError()],

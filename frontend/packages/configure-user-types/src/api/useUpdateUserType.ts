@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {updateUserType, type UpdateUserTypeRequest as SdkUpdateUserTypeRequest} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import UserTypeQueryKeys from '../constants/userTypeQueryKeys';
 import type {ApiUserType, UpdateUserTypeRequest} from '../types/user-types';
@@ -28,28 +29,18 @@ export interface UpdateUserTypeVariables {
  * @returns TanStack Query mutation object for updating user types
  */
 export default function useUpdateUserType(): UseMutationResult<ApiUserType, Error, UpdateUserTypeVariables> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('userTypes');
   const {showToast} = useToast();
 
   return useMutation<ApiUserType, Error, UpdateUserTypeVariables>({
-    mutationFn: async ({userTypeId, data}: UpdateUserTypeVariables): Promise<ApiUserType> => {
-      const serverUrl: string = getServerUrl();
-      const response: {
-        data: ApiUserType;
-      } = await http.request({
-        url: `${serverUrl}/user-types/${userTypeId}`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: data,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    mutationFn: async ({userTypeId, data}: UpdateUserTypeVariables): Promise<ApiUserType> =>
+      (await updateUserType({
+        ...config,
+        payload: data as unknown as SdkUpdateUserTypeRequest,
+        userTypeId,
+      })) as unknown as ApiUserType,
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({queryKey: [UserTypeQueryKeys.USER_TYPE, variables.userTypeId]}).catch(() => {
         // Ignore invalidation errors

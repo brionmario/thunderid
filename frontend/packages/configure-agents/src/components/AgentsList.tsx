@@ -4,6 +4,7 @@
 import {AccessStatusIndicator, QueryErrorNotice, ResourceAvatar} from '@thunderid/components';
 import {useDataGridLocaleText} from '@thunderid/hooks';
 import {useLogger} from '@thunderid/logger/react';
+import {BaseAgentList, type AdminListRenderProps, type BasicAgent as SdkBasicAgent} from '@thunderid/react';
 import {Box, IconButton, Tooltip, Typography, ListingTable, DataGrid} from '@wso2/oxygen-ui';
 import {Eye, Pencil, Trash2} from '@wso2/oxygen-ui-icons-react';
 import {useMemo, useCallback, useState, type JSX} from 'react';
@@ -21,7 +22,9 @@ export default function AgentsList(): JSX.Element {
   const {t} = useTranslation();
   const logger = useLogger('AgentsList');
   const dataGridLocaleText = useDataGridLocaleText();
-  const {data, isLoading, error, refetch} = useGetAgents();
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [offset, setOffset] = useState<number>(0);
+  const agentsQuery = useGetAgents({limit: pageSize, offset});
 
   // Resolves an error through the `agents` catalog. `t` defaults to the `common` namespace, so
   // this forwards explicit `ns:` prefixes unchanged and prefixes bare keys with `agents:`, per
@@ -154,31 +157,49 @@ export default function AgentsList(): JSX.Element {
     [handleDeleteClick, handleEditClick, t],
   );
 
-  if (error) {
-    return (
-      <QueryErrorNotice
-        error={error}
-        t={tForErrors}
-        variant="block"
-        title={t('agents:listing.loadError', 'Failed to load agents')}
-        onRetry={() => void refetch()}
-      />
-    );
-  }
+  const renderList = ({
+    isLoading,
+    limit,
+    onPageChange,
+    rows,
+    totalResults,
+  }: AdminListRenderProps<SdkBasicAgent>): JSX.Element => {
+    if (agentsQuery.error) {
+      return (
+        <QueryErrorNotice
+          error={agentsQuery.error}
+          t={tForErrors}
+          variant="block"
+          title={t('agents:listing.loadError', 'Failed to load agents')}
+          onRetry={() => {
+            agentsQuery.refetch().catch((_error: unknown) => {
+              logger.error('Failed to reload agents', {error: _error});
+            });
+          }}
+        />
+      );
+    }
 
-  return (
-    <Box data-testid="agents-list">
+    return (
       <ListingTable.Provider variant="data-grid-card" loading={isLoading}>
         <ListingTable.Container disablePaper>
           <ListingTable.DataGrid
-            rows={data?.agents ?? []}
+            rows={rows as BasicAgent[]}
             columns={columns}
             getRowId={(row): string => (row as BasicAgent).id}
             onRowClick={(params) => {
               handleEditClick((params.row as BasicAgent).id);
             }}
-            initialState={{
-              pagination: {paginationModel: {pageSize: 10}},
+            paginationMode="server"
+            rowCount={totalResults}
+            paginationModel={{page: Math.floor(offset / limit), pageSize: limit}}
+            onPaginationModelChange={(model: DataGrid.GridPaginationModel) => {
+              if (model.pageSize !== limit) {
+                setPageSize(model.pageSize);
+                onPageChange?.(0);
+                return;
+              }
+              onPageChange?.(model.page * limit);
             }}
             pageSizeOptions={[5, 10, 25, 50]}
             disableRowSelectionOnClick
@@ -192,6 +213,22 @@ export default function AgentsList(): JSX.Element {
           />
         </ListingTable.Container>
       </ListingTable.Provider>
+    );
+  };
+
+  return (
+    <Box data-testid="agents-list">
+      <BaseAgentList
+        agents={(agentsQuery.data?.agents ?? []) as SdkBasicAgent[]}
+        totalResults={agentsQuery.data?.totalResults ?? 0}
+        limit={pageSize}
+        offset={offset}
+        onPageChange={setOffset}
+        isLoading={agentsQuery.isLoading}
+        error={agentsQuery.error?.message ?? null}
+      >
+        {renderList}
+      </BaseAgentList>
 
       <AgentDeleteDialog open={deleteDialogOpen} agentId={selectedAgentId} onClose={handleDeleteDialogClose} />
     </Box>

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {updateAgentType, type UpdateAgentTypeRequest as SdkUpdateAgentTypeRequest} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import AgentTypeQueryKeys from '../constants/agentTypeQueryKeys';
 import type {ApiAgentType} from '../models/agent-type';
@@ -29,28 +30,18 @@ export interface UpdateAgentTypeVariables {
  * @returns TanStack Query mutation object for updating agent types
  */
 export default function useUpdateAgentType(): UseMutationResult<ApiAgentType, Error, UpdateAgentTypeVariables> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('agentTypes');
   const {showToast} = useToast();
 
   return useMutation<ApiAgentType, Error, UpdateAgentTypeVariables>({
-    mutationFn: async ({agentTypeId, data}: UpdateAgentTypeVariables): Promise<ApiAgentType> => {
-      const serverUrl: string = getServerUrl();
-      const response: {
-        data: ApiAgentType;
-      } = await http.request({
-        url: `${serverUrl}/agent-types/${agentTypeId}`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: data,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    mutationFn: async ({agentTypeId, data}: UpdateAgentTypeVariables): Promise<ApiAgentType> =>
+      (await updateAgentType({
+        ...config,
+        agentTypeId,
+        payload: data as unknown as SdkUpdateAgentTypeRequest,
+      })) as unknown as ApiAgentType,
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({queryKey: [AgentTypeQueryKeys.AGENT_TYPE, variables.agentTypeId]}).catch(() => {
         // Ignore invalidation errors

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useQuery, type UseQueryResult} from '@tanstack/react-query';
-import {useConfig} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {getRole} from '@thunderid/react';
 import RoleQueryKeys from '../constants/role-query-keys';
 import type {Role} from '../models/role';
 
@@ -14,21 +14,11 @@ import type {Role} from '../models/role';
  * @returns TanStack Query result object containing role data
  */
 export default function useGetRole(roleId: string): UseQueryResult<Role> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
 
   return useQuery<Role>({
     queryKey: [RoleQueryKeys.ROLE, roleId],
-    queryFn: async (): Promise<Role> => {
-      const serverUrl: string = getServerUrl();
-
-      const response: {data: Role} = await http.request({
-        url: `${serverUrl}/roles/${roleId}?include=display`,
-        method: 'GET',
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    queryFn: async (): Promise<Role> => (await getRole({...config, roleId})) as unknown as Role,
     enabled: !!roleId,
   });
 }

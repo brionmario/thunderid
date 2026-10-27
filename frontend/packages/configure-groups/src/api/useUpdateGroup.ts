@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {updateGroup, type UpdateGroupRequest as SdkUpdateGroupRequest} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import GroupQueryKeys from '../constants/group-query-keys';
 import type {Group} from '../models/group';
@@ -23,28 +24,14 @@ export interface UpdateGroupVariables {
  * @returns TanStack Query mutation object for updating groups
  */
 export default function useUpdateGroup(): UseMutationResult<Group, Error, UpdateGroupVariables> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('groups');
   const {showToast} = useToast();
 
   return useMutation<Group, Error, UpdateGroupVariables>({
-    mutationFn: async ({groupId, data}: UpdateGroupVariables): Promise<Group> => {
-      const serverUrl: string = getServerUrl();
-      const response: {
-        data: Group;
-      } = await http.request({
-        url: `${serverUrl}/groups/${groupId}`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: data,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    mutationFn: async ({groupId, data}: UpdateGroupVariables): Promise<Group> =>
+      (await updateGroup({...config, groupId, payload: data as SdkUpdateGroupRequest})) as unknown as Group,
     onSuccess: (_data, {groupId}) => {
       queryClient.invalidateQueries({queryKey: [GroupQueryKeys.GROUP, groupId]}).catch(() => {
         // Ignore invalidation errors

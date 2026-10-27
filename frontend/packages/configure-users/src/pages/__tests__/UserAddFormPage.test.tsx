@@ -23,14 +23,23 @@ vi.mock('react-router', async () => ({
   useNavigate: () => mockNavigate,
 }));
 
-vi.mock('@thunderid/react', async (importOriginal) => {
-  const actual = await importOriginal();
+// The SDK's API functions send through the management config's fetcher; this one records each
+// request and answers it from the routes a test sets up.
+vi.mock('@thunderid/components', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useManagementApiConfig: () => ({
+    baseUrl: 'https://api.test.com',
+    fetcher: async (url: string, init: RequestInit): Promise<Response> => {
+      const {data} = await mockHttpRequest({
+        url,
+        method: init.method ?? 'GET',
+        data: typeof init.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined,
+      });
 
-  return {
-    ...(actual as object),
-    useThunderID: () => ({http: {request: mockHttpRequest}}),
-  };
-});
+      return new Response(JSON.stringify(data), {status: 200, headers: {'Content-Type': 'application/json'}});
+    },
+  }),
+}));
 
 vi.mock('@thunderid/configure-organization-units', () => ({
   OrganizationUnitTreePicker: ({
@@ -80,7 +89,7 @@ describe('UserAddFormPage', () => {
       if (config.method === 'POST' && config.url.endsWith('/users')) {
         return Promise.resolve({data: {id: 'user-1'}});
       }
-      if (config.url.endsWith('/user-types/type-1')) {
+      if (config.url.includes('/user-types/type-1')) {
         return Promise.resolve({data: customerType});
       }
       if (config.url.includes('/user-types')) {
@@ -132,8 +141,8 @@ describe('UserAddFormPage', () => {
     const employeeType = {...customerType, id: 'type-2', handle: 'employee', displayName: 'Employee'};
     mockHttpRequest.mockImplementation((config: RecordedRequest) => {
       if (config.method === 'POST') return Promise.resolve({data: {id: 'user-2'}});
-      if (config.url.endsWith('/user-types/type-1')) return Promise.resolve({data: customerType});
-      if (config.url.endsWith('/user-types/type-2')) return Promise.resolve({data: employeeType});
+      if (config.url.includes('/user-types/type-1')) return Promise.resolve({data: customerType});
+      if (config.url.includes('/user-types/type-2')) return Promise.resolve({data: employeeType});
       return Promise.resolve({data: twoTypes});
     });
     const user = userEvent.setup();

@@ -2,7 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type {ApiError} from '@thunderid/types';
-import type {FlowExecutionError} from '../flow/administrationFlow';
+
+/**
+ * The error a refused administration flow step carries.
+ */
+interface FlowStepError {
+  code?: string;
+  description?: {params?: Record<string, string>};
+  message?: {params?: Record<string, string>};
+}
 
 /**
  * A minimal subset of the i18next TFunction interface used by {@link getErrorMessage}.
@@ -41,7 +49,10 @@ export default function getErrorMessage(
   fallbackKey: string,
   fallbackDefaultValue?: string,
 ): string {
-  const apiError = (error as {response?: {data?: ApiError}}).response?.data;
+  // An HTTP client error carries the server's error envelope as its response body; an SDK API error
+  // (ThunderIDAPIError) carries it as `serverError`.
+  const apiError =
+    (error as {response?: {data?: ApiError}}).response?.data ?? (error as {serverError?: ApiError}).serverError;
 
   if (apiError?.code) {
     // The server sends its description as an i18n object with optional params; interpolate them so a
@@ -85,15 +96,20 @@ function apiErrorParams(apiError: ApiError): Record<string, string> | undefined 
 }
 
 /**
- * Reads the step error a failed flow reports on the thrown error, as `FlowExecutionFailure` and the embedded
- * create flows both do. An axios transport error also carries a `code` (e.g. `ERR_NETWORK`), which is not one.
+ * Reads the step error a refused administration flow reports on the thrown error, as the SDK's
+ * `AdministrationFlowError` carries it. An axios transport error also carries a `code` (e.g.
+ * `ERR_NETWORK`), which is not one.
  */
-function flowErrorOf(error: Error): FlowExecutionError | undefined {
-  const candidate = error as Error & {code?: string; error?: FlowExecutionError; isAxiosError?: boolean};
+function flowErrorOf(error: Error): FlowStepError | undefined {
+  const candidate = error as Error & {
+    code?: string;
+    flowError?: FlowStepError;
+    isAxiosError?: boolean;
+  };
 
   if (candidate.isAxiosError) {
     return undefined;
   }
 
-  return {...candidate.error, code: candidate.code ?? candidate.error?.code};
+  return {...candidate.flowError, code: candidate.flowError?.code ?? candidate.code};
 }

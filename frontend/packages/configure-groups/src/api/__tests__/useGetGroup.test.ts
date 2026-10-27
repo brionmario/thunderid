@@ -1,77 +1,58 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor} from '@testing-library/react';
-import {renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import GroupQueryKeys from '../../constants/group-query-keys';
 import type {Group} from '../../models/group';
+import useGetGroup from '../useGetGroup';
 
-const mockHttpRequest = vi.fn();
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockGetGroup} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetGroup: vi.fn(),
 }));
 
-const mockGetServerUrl = vi.fn<() => string>(() => 'https://localhost:8090');
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
-
-const {default: useGetGroup} = await import('../useGetGroup');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getGroup: mockGetGroup}));
 
 describe('useGetGroup', () => {
-  const mockGroup: Group = {
-    id: 'g1',
-    name: 'Test Group',
-    description: 'A test group',
-    ouId: 'ou1',
-    members: [{id: 'u1', type: 'user'}],
-  };
+  const group: Group = {id: 'g1', name: 'Platform team', ouId: 'ou-1', members: [{id: 'u1', type: 'user'}]};
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReturnValue('https://localhost:8090');
+    mockGetGroup.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should load the group through the SDK and cache it under its key', async () => {
+    mockGetGroup.mockResolvedValueOnce(group);
 
-  it('should fetch a group by ID', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockGroup});
-    const {result} = renderHook(() => useGetGroup('g1'));
+    const {result, queryClient} = renderHook(() => useGetGroup('g1'));
 
     await waitFor(() => {
-      expect(result.current.data).toEqual(mockGroup);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://localhost:8090/groups/g1?include=display',
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(group);
+    expect(mockGetGroup).toHaveBeenCalledWith({...config, groupId: 'g1'});
+    expect(queryClient.getQueryData([GroupQueryKeys.GROUP, 'g1'])).toEqual(group);
   });
 
-  it('should not fetch when groupId is empty', () => {
+  it('should not fetch without a group ID', () => {
     const {result} = renderHook(() => useGetGroup(''));
 
     expect(result.current.fetchStatus).toBe('idle');
-    expect(mockHttpRequest).not.toHaveBeenCalled();
+    expect(mockGetGroup).not.toHaveBeenCalled();
   });
 
-  it('should handle error', async () => {
-    mockHttpRequest.mockRejectedValue(new Error('Not found'));
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Group not found');
+    mockGetGroup.mockRejectedValueOnce(error);
+
     const {result} = renderHook(() => useGetGroup('g1'));
 
     await waitFor(() => {
-      expect(result.current.error).toBeTruthy();
-      expect(result.current.error?.message).toBe('Not found');
+      expect(result.current.isError).toBe(true);
     });
+
+    expect(result.current.error).toBe(error);
   });
 });

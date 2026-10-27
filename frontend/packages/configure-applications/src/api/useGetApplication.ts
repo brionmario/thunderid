@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useQuery, type UseQueryResult} from '@tanstack/react-query';
-import {useConfig} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {getApplication} from '@thunderid/react';
 import ApplicationQueryKeys from '../constants/application-query-keys';
 import type {Application} from '../models/application';
 
@@ -38,26 +38,12 @@ import type {Application} from '../models/application';
  * @public
  */
 export default function useGetApplication(applicationId: string): UseQueryResult<Application> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
 
   return useQuery<Application>({
     queryKey: [ApplicationQueryKeys.APPLICATION, applicationId],
-    queryFn: async (): Promise<Application> => {
-      const serverUrl: string = getServerUrl();
-
-      const response: {
-        data: Application;
-      } = await http.request({
-        url: `${serverUrl}/applications/${applicationId}`,
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    queryFn: async (): Promise<Application> =>
+      (await getApplication({...config, applicationId})) as unknown as Application,
     enabled: Boolean(applicationId),
   });
 }

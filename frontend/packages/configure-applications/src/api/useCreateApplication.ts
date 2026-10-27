@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {createApplication, type CreateApplicationRequest as SdkCreateApplicationRequest} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import ApplicationQueryKeys from '../constants/application-query-keys';
 import type {Application} from '../models/application';
@@ -46,28 +47,17 @@ import type {CreateApplicationRequest} from '../models/requests';
  * @public
  */
 export default function useCreateApplication(): UseMutationResult<Application, Error, CreateApplicationRequest> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('applications');
   const {showToast} = useToast();
 
   return useMutation<Application, Error, CreateApplicationRequest>({
-    mutationFn: async (applicationData: CreateApplicationRequest): Promise<Application> => {
-      const serverUrl: string = getServerUrl();
-      const response: {
-        data: Application;
-      } = await http.request({
-        url: `${serverUrl}/applications`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: applicationData,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    mutationFn: async (applicationData: CreateApplicationRequest): Promise<Application> =>
+      (await createApplication({
+        ...config,
+        payload: applicationData as unknown as SdkCreateApplicationRequest,
+      })) as unknown as Application,
     onSuccess: () => {
       // Invalidate and refetch applications list after successful creation
       queryClient.invalidateQueries({queryKey: [ApplicationQueryKeys.APPLICATIONS]}).catch(() => {

@@ -2,68 +2,51 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {waitFor, renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import UserTypeQueryKeys from '../../constants/userTypeQueryKeys';
 import type {UserTypeListResponse} from '../../types/user-types';
 import useGetUserTypes from '../useGetUserTypes';
 
-const mockHttpRequest = vi.fn();
-// Mock the dependencies
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({http: {request: mockHttpRequest}}),
+const {config, mockList} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockList: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: vi.fn(),
-  };
-});
-
-const {useConfig} = await import('@thunderid/contexts');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getUserTypes: mockList}));
 
 describe('useGetUserTypes', () => {
-  let mockGetServerUrl: ReturnType<typeof vi.fn>;
-
-  const mockUserTypeListResponse: UserTypeListResponse = {
-    totalResults: 2,
+  const response: UserTypeListResponse = {
+    totalResults: 1,
     startIndex: 1,
-    count: 2,
+    count: 1,
     types: [
-      {id: '123', handle: 'user-type-1', displayName: 'UserType1', ouId: 'root-ou', allowSelfRegistration: false},
-      {id: '456', handle: 'user-type-2', displayName: 'UserType2', ouId: 'child-ou', allowSelfRegistration: true},
+      {
+        id: 'type-1',
+        handle: 'person',
+        displayName: 'Person',
+        ouId: 'ou-1',
+        ouHandle: 'root',
+        allowSelfRegistration: false,
+      },
     ],
-    links: [{rel: 'self', href: 'https://api.test.com/user-types'}],
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: mockGetServerUrl,
-    } as unknown as ReturnType<typeof useConfig>);
+    mockList.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should initialize with loading state', () => {
-    mockHttpRequest.mockReturnValue(new Promise(() => null)); // Never resolves
+  it('should start in the loading state', () => {
+    mockList.mockReturnValue(new Promise(() => null));
 
     const {result} = renderHook(() => useGetUserTypes());
 
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toBeNull();
   });
 
-  it('should successfully fetch user types list', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
+  it('should load through the SDK with the management config', async () => {
+    mockList.mockResolvedValueOnce(response);
 
     const {result} = renderHook(() => useGetUserTypes());
 
@@ -71,85 +54,26 @@ describe('useGetUserTypes', () => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(result.current.data).toEqual(mockUserTypeListResponse);
-    expect(result.current.data?.types).toHaveLength(2);
-    expect(result.current.data?.totalResults).toBe(2);
-    expect(result.current.data?.count).toBe(2);
+    expect(result.current.data).toEqual(response);
+    expect(mockList).toHaveBeenCalledWith({...config, limit: undefined, offset: undefined});
   });
 
-  it('should build URL without query params when none provided', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
+  it('should pass the paging params through and cache each page under its own key', async () => {
+    mockList.mockResolvedValueOnce(response);
 
-    renderHook(() => useGetUserTypes());
+    const {result, queryClient} = renderHook(() => useGetUserTypes({limit: 10, offset: 20}));
 
     await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toBe('https://api.test.com/user-types?include=display');
+    expect(mockList).toHaveBeenCalledWith({...config, limit: 10, offset: 20});
+    expect(queryClient.getQueryData([UserTypeQueryKeys.USER_TYPES, {limit: 10, offset: 20}])).toEqual(response);
   });
 
-  it('should build URL with limit parameter only', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    renderHook(() => useGetUserTypes({limit: 10}));
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toBe('https://api.test.com/user-types?limit=10&include=display');
-  });
-
-  it('should build URL with offset parameter only', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    renderHook(() => useGetUserTypes({offset: 5}));
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toBe('https://api.test.com/user-types?offset=5&include=display');
-  });
-
-  it('should build URL with both limit and offset parameters', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    renderHook(() => useGetUserTypes({limit: 10, offset: 5}));
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toContain('limit=10');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toContain('offset=5');
-  });
-
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to fetch user types');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Failed to fetch');
+    mockList.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useGetUserTypes());
 
@@ -157,132 +81,6 @@ describe('useGetUserTypes', () => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
-    expect(result.current.data).toBeUndefined();
-  });
-
-  it('should use correct server URL from config', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    renderHook(() => useGetUserTypes());
-
-    await waitFor(() => {
-      expect(mockGetServerUrl).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.url).toContain('https://api.test.com/user-types');
-  });
-
-  it('should include correct headers', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    renderHook(() => useGetUserTypes());
-
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.method).toBe('GET');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.headers['Content-Type']).toBe('application/json');
-  });
-
-  it('should use correct query key', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    const {result, queryClient} = renderHook(() => useGetUserTypes({limit: 20, offset: 10}));
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    const cache = queryClient.getQueryCache();
-    const queries = cache.findAll({
-      queryKey: [UserTypeQueryKeys.USER_TYPES, {limit: 20, offset: 10}],
-    });
-
-    expect(queries).toHaveLength(1);
-  });
-
-  it('should cache results for same parameters', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUserTypeListResponse,
-    });
-
-    // First call - get the queryClient from the render result
-    const {result: result1, queryClient} = renderHook(() => useGetUserTypes({limit: 10, offset: 0}));
-
-    await waitFor(() => {
-      expect(result1.current.isSuccess).toBe(true);
-    });
-
-    // Set the data as fresh to prevent refetch
-    queryClient.setQueryDefaults([UserTypeQueryKeys.USER_TYPES, {limit: 10, offset: 0}], {
-      staleTime: Infinity,
-    });
-
-    // Second call with same queryClient should use cache
-    const {result: result2} = renderHook(() => useGetUserTypes({limit: 10, offset: 0}), {
-      queryClient,
-    });
-
-    await waitFor(() => {
-      expect(result2.current.data).toEqual(mockUserTypeListResponse);
-    });
-    expect(mockHttpRequest).toHaveBeenCalledTimes(1); // Should not make another request
-  });
-
-  it('should support refetching data', async () => {
-    mockHttpRequest.mockResolvedValue({
-      data: mockUserTypeListResponse,
-    });
-
-    const {result} = renderHook(() => useGetUserTypes());
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(mockHttpRequest).toHaveBeenCalledTimes(1);
-
-    // Refetch the data
-    await result.current.refetch();
-
-    expect(mockHttpRequest).toHaveBeenCalledTimes(2);
-  });
-
-  it('should handle empty list', async () => {
-    const emptyResponse: UserTypeListResponse = {
-      totalResults: 0,
-      startIndex: 0,
-      count: 0,
-      types: [],
-    };
-
-    mockHttpRequest.mockResolvedValueOnce({
-      data: emptyResponse,
-    });
-
-    const {result} = renderHook(() => useGetUserTypes());
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(emptyResponse);
-    expect(result.current.data?.types).toHaveLength(0);
-    expect(result.current.data?.totalResults).toBe(0);
+    expect(result.current.error).toBe(error);
   });
 });

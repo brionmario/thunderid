@@ -11,13 +11,7 @@ import {OrganizationUnitProvider} from '@thunderid/configure-organization-units'
 import {RoleCreateProvider} from '@thunderid/configure-roles';
 import {TranslationCreateProvider} from '@thunderid/configure-translations';
 import {UserTypeCreateProvider} from '@thunderid/configure-user-types';
-import {
-  AdministrationModes,
-  AdministrationProvider,
-  RoutesProvider,
-  ToastProvider,
-  type AdministrationConfig,
-} from '@thunderid/contexts';
+import {RoutesProvider, ToastProvider} from '@thunderid/contexts';
 import {ProtectedRoute} from '@thunderid/react-router';
 import {lazy, Suspense, type JSX} from 'react';
 import {BrowserRouter, Navigate, Outlet, Route, Routes} from 'react-router';
@@ -194,12 +188,6 @@ const GetStartedPage = lazy(() => import('@thunderid/configure-onboarding').then
 const WelcomePage = lazy(() => import('@thunderid/configure-onboarding').then((m) => ({default: m.WelcomePage})));
 
 /**
- * The control plane executes no flows: it holds configuration and deploys it to gateways, which
- * run the flows. Every administration operation therefore calls the management API directly.
- */
-const CONTROL_PLANE_ADMINISTRATION: AdministrationConfig = {mode: AdministrationModes.NATIVE};
-
-/**
  * The console the control plane serves: everything the console offers, plus the gateways the
  * configuration is deployed to, and without the tryouts, which walk through flows the control
  * plane does not run.
@@ -208,7 +196,6 @@ export default function App(): JSX.Element {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <RoutesProvider paths={RouteConfig}>
-        <AdministrationProvider administration={CONTROL_PLANE_ADMINISTRATION}>
           <ToastProvider>
             <WelcomeRedirect />
             <Suspense fallback={<PageLoader />}>
@@ -592,7 +579,6 @@ export default function App(): JSX.Element {
               </Routes>
             </Suspense>
           </ToastProvider>
-        </AdministrationProvider>
       </RoutesProvider>
     </BrowserRouter>
   );

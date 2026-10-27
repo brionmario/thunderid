@@ -1,150 +1,71 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor} from '@testing-library/react';
-import {renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import GroupQueryKeys from '../../constants/group-query-keys';
 import type {GroupListResponse} from '../../models/group';
+import useGetGroups from '../useGetGroups';
 
-const mockHttpRequest = vi.fn();
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockGetGroups} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetGroups: vi.fn(),
 }));
 
-const mockGetServerUrl = vi.fn<() => string>(() => 'https://localhost:8090');
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
-
-const {default: useGetGroups} = await import('../useGetGroups');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getGroups: mockGetGroups}));
 
 describe('useGetGroups', () => {
-  const mockGroupsData: GroupListResponse = {
+  const response: GroupListResponse = {
     totalResults: 2,
-    startIndex: 0,
+    startIndex: 1,
     count: 2,
     groups: [
-      {id: 'g1', name: 'Group One', ouId: 'ou1'},
-      {id: 'g2', name: 'Group Two', description: 'Desc', ouId: 'ou2'},
+      {id: 'g1', name: 'Group One', ouId: 'ou-1'},
+      {id: 'g2', name: 'Group Two', ouId: 'ou-1'},
     ],
   };
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReturnValue('https://localhost:8090');
+    mockGetGroups.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should load the first page by default', async () => {
+    mockGetGroups.mockResolvedValueOnce(response);
 
-  it('should fetch groups with default pagination', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockGroupsData});
     const {result} = renderHook(() => useGetGroups());
 
     await waitFor(() => {
-      expect(result.current.data).toEqual(mockGroupsData);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://localhost:8090/groups?limit=30&offset=0&include=display',
-        method: 'GET',
-      }),
-    );
+    expect(result.current.data).toEqual(response);
+    expect(mockGetGroups).toHaveBeenCalledWith({...config, limit: 30, offset: 0});
   });
 
-  it('should fetch groups with custom pagination', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockGroupsData});
-    renderHook(() => useGetGroups({limit: 10, offset: 20}));
+  it('should pass the paging params through and cache each page under its own key', async () => {
+    mockGetGroups.mockResolvedValueOnce(response);
+
+    const {result, queryClient} = renderHook(() => useGetGroups({limit: 10, offset: 20}));
 
     await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: 'https://localhost:8090/groups?limit=10&offset=20&include=display',
-        }),
-      );
+      expect(result.current.isSuccess).toBe(true);
     });
+
+    expect(mockGetGroups).toHaveBeenCalledWith({...config, limit: 10, offset: 20});
+    expect(queryClient.getQueryData([GroupQueryKeys.GROUPS, {limit: 10, offset: 20}])).toEqual(response);
   });
 
-  it('should set loading state', () => {
-    mockHttpRequest.mockImplementation(() => new Promise(() => null));
-    const {result, unmount} = renderHook(() => useGetGroups());
+  it('should surface the error the SDK throws', async () => {
+    const error = new Error('Failed to fetch groups');
+    mockGetGroups.mockRejectedValueOnce(error);
 
-    expect(result.current.isLoading).toBe(true);
-    unmount();
-  });
-
-  it('should handle error', async () => {
-    mockHttpRequest.mockRejectedValue(new Error('Network error'));
     const {result} = renderHook(() => useGetGroups());
 
     await waitFor(() => {
-      expect(result.current.error).toBeTruthy();
-      expect(result.current.error?.message).toBe('Network error');
-    });
-  });
-
-  it('should keep the previous page data while fetching a new page', async () => {
-    const nextPageData: GroupListResponse = {
-      totalResults: 2,
-      startIndex: 11,
-      count: 2,
-      groups: [
-        {id: 'g3', name: 'Group Three', ouId: 'ou1'},
-        {id: 'g4', name: 'Group Four', ouId: 'ou2'},
-      ],
-    };
-    let resolveNextPage: ((value: {data: GroupListResponse}) => void) | undefined;
-    mockHttpRequest.mockImplementation((request: {url: string}) => {
-      if (request.url.includes('offset=0')) {
-        return Promise.resolve({data: mockGroupsData});
-      }
-
-      if (request.url.includes('offset=10')) {
-        return new Promise((resolve) => {
-          resolveNextPage = resolve;
-        });
-      }
-
-      throw new Error(`Unexpected groups request: ${request.url}`);
+      expect(result.current.isError).toBe(true);
     });
 
-    const {result, rerender} = renderHook(({offset}: {offset: number}) => useGetGroups({limit: 10, offset}), {
-      initialProps: {offset: 0},
-    });
-
-    await waitFor(() => {
-      expect(result.current.data).toEqual(mockGroupsData);
-    });
-
-    rerender({offset: 10});
-
-    expect(result.current.data).toEqual(mockGroupsData);
-    expect(result.current.isFetching).toBe(true);
-    await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: 'https://localhost:8090/groups?limit=10&offset=10&include=display',
-        }),
-      );
-      expect(resolveNextPage).toBeDefined();
-    });
-
-    if (!resolveNextPage) {
-      throw new Error('The next-page request was not captured');
-    }
-    resolveNextPage({data: nextPageData});
-
-    await waitFor(() => {
-      expect(result.current.isFetching).toBe(false);
-      expect(result.current.data).toEqual(nextPageData);
-    });
+    expect(result.current.error).toBe(error);
   });
 });

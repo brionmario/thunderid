@@ -6,12 +6,15 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import type {ApiUserType, UserTypeListResponse} from '../../types/user-types';
 import useGetUserTypeAttributes from '../useGetUserTypeAttributes';
 
-const mockHttpRequest = vi.fn();
-const mockLoggerWarn = vi.fn();
-
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({http: {request: mockHttpRequest}}),
+const {config, mockGetUserType, mockGetUserTypes, mockLoggerWarn} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockGetUserType: vi.fn(),
+  mockGetUserTypes: vi.fn(),
+  mockLoggerWarn: vi.fn(),
 }));
+
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({getUserType: mockGetUserType, getUserTypes: mockGetUserTypes}));
 
 vi.mock('@thunderid/logger/react', () => ({
   useLogger: () => ({
@@ -21,16 +24,6 @@ vi.mock('@thunderid/logger/react', () => ({
     debug: vi.fn(),
   }),
 }));
-
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: vi.fn(),
-  };
-});
-
-const {useConfig} = await import('@thunderid/contexts');
 
 /**
  * Build a list response for the given user types.
@@ -52,33 +45,25 @@ function buildListResponse(
 }
 
 /**
- * Route the mocked http client: the list endpoint returns the given list, and each user type
- * endpoint returns its schema.
+ * Route the mocked requests: the list endpoint returns the given list, and each user type
+ * returns its schema.
  *
  * @param list - The list response.
  * @param schemas - Schema by user type id. A missing entry rejects, simulating a failed fetch.
  */
 function mockRequests(list: UserTypeListResponse, schemas: Record<string, ApiUserType>): void {
-  mockHttpRequest.mockImplementation(({url}: {url: string}) => {
-    const match = /\/user-types\/([^?]+)/.exec(url);
-
-    if (!match) {
-      return Promise.resolve({data: list});
-    }
-
-    const schema = schemas[match[1]];
-    return schema ? Promise.resolve({data: schema}) : Promise.reject(new Error('failed'));
+  mockGetUserTypes.mockResolvedValue(list);
+  mockGetUserType.mockImplementation(({userTypeId}: {userTypeId: string}) => {
+    const schema = schemas[userTypeId];
+    return schema ? Promise.resolve(schema) : Promise.reject(new Error('failed'));
   });
 }
 
 describe('useGetUserTypeAttributes', () => {
   beforeEach(() => {
-    mockHttpRequest.mockReset();
+    mockGetUserTypes.mockReset();
+    mockGetUserType.mockReset();
     mockLoggerWarn.mockReset();
-
-    vi.mocked(useConfig).mockReturnValue({
-      getServerUrl: vi.fn().mockReturnValue('https://api.test.com'),
-    } as unknown as ReturnType<typeof useConfig>);
   });
 
   afterEach(() => {
@@ -100,11 +85,8 @@ describe('useGetUserTypeAttributes', () => {
     renderHook(() => useGetUserTypeAttributes());
 
     await waitFor(() => {
-      expect(mockHttpRequest).toHaveBeenCalled();
+      expect(mockGetUserTypes).toHaveBeenCalledWith(expect.objectContaining({limit: 100}));
     });
-
-    const firstCall = mockHttpRequest.mock.calls[0][0] as {url: string};
-    expect(firstCall.url).toContain('limit=100');
   });
 
   it('should aggregate and de-duplicate attributes across user types', async () => {
@@ -212,11 +194,8 @@ describe('useGetUserTypeAttributes', () => {
   });
 
   it('should report loading until every schema resolves', () => {
-    mockHttpRequest.mockImplementation(({url}: {url: string}) =>
-      /\/user-types\/[^?]+/.test(url)
-        ? new Promise(() => null)
-        : Promise.resolve({data: buildListResponse([{id: '1', handle: 'person', displayName: 'Person'}])}),
-    );
+    mockGetUserTypes.mockResolvedValue(buildListResponse([{id: '1', handle: 'person', displayName: 'Person'}]));
+    mockGetUserType.mockReturnValue(new Promise(() => null));
 
     const {result} = renderHook(() => useGetUserTypeAttributes());
 

@@ -34,7 +34,7 @@ const user = await createUser({
 })
 ```
 
-In a React application, use the [management hooks](../../../react/apis/hooks/management-hooks) instead. They supply an authenticated fetcher for you.
+In a React application, get the request configuration from [`useManagementRequestConfig`](../../../react/apis/hooks/management-api). It supplies the authenticated fetcher for you.
 
 ## Request Configuration
 
@@ -102,7 +102,7 @@ The agent `type` is the handle of an agent type, and `allowedUserTypes` and `all
 
 ## Management API on a Separate Host
 
-When the management API runs on a different host from the authorization server, pass the collection URL as `url`. To keep the URL in configuration instead, set `endpoints.applications`, `endpoints.users`, or `endpoints.agents` and read it with `resolveResourceEndpoint`, as the React hooks do. See [Configuration](../configuration#discovery-and-endpoint-parameters).
+When the management API runs on a different host from the authorization server, pass the collection URL as `url`. To keep the URL in configuration instead, set `endpoints.applications`, `endpoints.users`, or `endpoints.agents` and read it with `resolveResourceEndpoint`, as React's `useManagementRequestConfig` does. See [Configuration](../configuration#discovery-and-endpoint-parameters).
 
 ```ts
 await deleteUser({
@@ -112,9 +112,31 @@ await deleteUser({
 })
 ```
 
+## Administration Flows
+
+Some operations change more than one record on the server, so the server can run them as an administration flow instead of a direct call. For example, a user deletion flow revokes the user's grants and ends their sessions before it removes the user. Pass `administrationMode: 'flow'` to run the flow the server configures for the operation:
+
+```ts
+await deleteUser({
+  baseUrl: 'https://localhost:8090',
+  fetcher: authenticatedFetch,
+  userId: '<user-id>',
+  administrationMode: 'flow',
+})
+```
+
+| Value | Behavior |
+|-------|----------|
+| `'native'` (default) | Calls the management API directly. |
+| `'flow'` | Reads the flow configured for the operation and runs it. Calls the management API directly when the server configures no flow for the operation. Needs `baseUrl`, and an access token that can read server configuration. |
+
+Operations that accept `administrationMode` include `deleteUser`, `deleteGroup`, `removeGroupMembers`, `deleteRole`, `removeRoleAssignments`, `updateRole` (when it removes a permission), `deleteApplication`, and `regenerateClientSecret`.
+
+A flow step that refuses the operation throws `AdministrationFlowError`. Its `flowError` property carries the step's error code and message.
+
 ## Cache Keys
 
-`ApplicationQueryKeys`, `UserQueryKeys`, and `AgentQueryKeys` name each resource for caching. The React hooks use them to refetch after a mutation. Reuse them as keys in your own data fetching cache.
+`ApplicationQueryKeys`, `UserQueryKeys`, and `AgentQueryKeys` name each resource for caching. The SDK's admin components use them to refetch after a mutation. Reuse them as keys in your own data fetching cache.
 
 | Constant | Keys |
 |----------|------|
@@ -134,6 +156,8 @@ Every function throws [`ThunderIDAPIError`](../errors#thunderidapierror). The `c
 | `{function}-NotFoundError-001` | The server returned HTTP 404. The resource does not exist. |
 | `{function}-ResponseError-001` | The server returned another non-2xx status. |
 | `{function}-NetworkError-001` | The request failed before a response arrived, or the response could not be parsed. |
+
+When the server rejects a request, `serverError` carries the server's own error: its `code` (for example `USR-1027`), and its `message` and `description`, each with a `key`, a `defaultValue`, and the `params` to interpolate. Use it to show a translated message.
 
 ```ts
 import { getApplication, ThunderIDAPIError } from '@thunderid/javascript'

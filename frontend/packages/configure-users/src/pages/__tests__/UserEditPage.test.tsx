@@ -20,16 +20,6 @@ vi.mock('@thunderid/components', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@thunderid/components')>();
   return {
     ...actual,
-    AccountStatusAction: ({listQueryKey, onChanged}: {listQueryKey: unknown; onChanged: () => void}) => (
-      <button
-        type="button"
-        data-testid="account-status-action"
-        data-list-query-key={JSON.stringify(listQueryKey)}
-        onClick={onChanged}
-      >
-        status action
-      </button>
-    ),
     CopyableId: vi.fn(() => null),
   };
 });
@@ -151,6 +141,11 @@ vi.mock('@/api/useUpdateUser', () => ({
 
 vi.mock('@/api/useDeleteUser', () => ({
   default: () => mockUseDeleteUser(),
+}));
+
+// Nothing references the user, so the delete dialog can confirm as soon as it opens.
+vi.mock('@/api/useGetUserUsages', () => ({
+  default: () => ({data: {totalResults: 0, count: 0, usages: []}, isLoading: false}),
 }));
 
 // Mock the heavy child components — focus on page-level wiring. Their own deep behavior is
@@ -515,72 +510,13 @@ describe('UserEditPage', () => {
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
 
-    it('offers the lifecycle action on a writable user', () => {
-      renderUser({});
-
-      expect(screen.getByTestId('account-status-action')).toBeInTheDocument();
-    });
-
-    // The lifecycle flows change only runtime state, which a declared record keeps too.
-    it('offers the lifecycle action on a read-only user', () => {
-      renderUser({isReadOnly: true});
-
-      expect(screen.getByTestId('account-status-action')).toBeInTheDocument();
-    });
-
-    it('shows the banner below the read-only notice and above the header', () => {
+    it('shows the banner below the read-only notice', () => {
       renderUser({isReadOnly: true, status: {value: 'LOCKED'}});
 
       const notice = screen.getByText('This resource is read-only and cannot be modified.');
       const banner = screen.getByRole('status');
       expect(banner).toHaveTextContent('Locked');
       expect(notice.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(
-        banner.compareDocumentPosition(screen.getByTestId('account-status-action')) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    });
-
-    describe('for the signed-in user', () => {
-      const signedInAs = (signedInUser: Record<string, unknown>): void => {
-        signedIn.user = signedInUser;
-      };
-
-      // The server refuses every lifecycle operation on one's own account.
-      it('hides the lifecycle actions on the signed-in user, matched by the token subject', () => {
-        signedInAs({sub: 'user123'});
-        renderUser({});
-
-        expect(screen.queryByTestId('account-status-action')).not.toBeInTheDocument();
-      });
-
-      it('hides the lifecycle actions on the signed-in user, matched by the profile id', () => {
-        signedInAs({id: 'user123'});
-        renderUser({});
-
-        expect(screen.queryByTestId('account-status-action')).not.toBeInTheDocument();
-      });
-
-      it('offers the lifecycle actions on another user', () => {
-        signedInAs({id: 'admin-1', sub: 'admin-1'});
-        renderUser({});
-
-        expect(screen.getByTestId('account-status-action')).toBeInTheDocument();
-      });
-    });
-
-    it('hands the users list query to the lifecycle action', () => {
-      renderUser({});
-
-      expect(screen.getByTestId('account-status-action')).toHaveAttribute('data-list-query-key', '["users"]');
-    });
-
-    it('refetches the user after a lifecycle operation', async () => {
-      const user = userEvent.setup();
-      renderUser({});
-
-      await user.click(screen.getByTestId('account-status-action'));
-
-      expect(mockRefetch).toHaveBeenCalled();
     });
 
     it('keeps a suspended user editable', async () => {

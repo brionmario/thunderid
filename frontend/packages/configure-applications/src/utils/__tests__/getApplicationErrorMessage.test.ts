@@ -51,12 +51,13 @@ function apiErrorFor(code: string, params?: {sourceFlowType?: string; flowType?:
  * `response.data` envelope, since the refusal arrives inside a 200 response.
  */
 function flowErrorFor(code: string, params?: Record<string, string>): Error {
+  // The shape of the SDK's AdministrationFlowError: the step's code, and the step error as `flowError`.
   const error = new Error('the flow did not complete') as Error & {
     code: string;
-    error: {code: string; message?: {params?: Record<string, string>}};
+    flowError: {code: string; message?: {params?: Record<string, string>}};
   };
   error.code = code;
-  error.error = {code, message: params ? {params} : undefined};
+  error.flowError = {code, message: params ? {params} : undefined};
 
   return error;
 }
@@ -93,6 +94,16 @@ describe('getApplicationErrorMessage', () => {
     expect(getApplicationErrorMessage(error, t, 'update.error')).toBe(
       "The Sign-up flow references a different Sign-in flow than the one configured for this application. Update the Sign-up flow so it calls the same Sign-in flow, or change the application's Sign-in flow configuration.",
     );
+  });
+
+  // The SDK's error has its own `code`, which must not shadow the server's envelope it carries.
+  it('reads APP-1039 from the envelope an SDK API error carries', () => {
+    const error = Object.assign(new Error('Failed to update application'), {
+      code: 'updateApplication-ResponseError-001',
+      serverError: {code: 'APP-1039', description: {params: {sourceFlowType: 'recovery', flowType: 'signout'}}},
+    });
+
+    expect(getApplicationErrorMessage(error, t, 'update.error')).toContain('The Recovery flow references');
   });
 
   it('resolves every known flow-type value to its Flows tab label', () => {

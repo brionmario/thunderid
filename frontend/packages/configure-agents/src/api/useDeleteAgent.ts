@@ -2,26 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {deleteAgent} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import AgentQueryKeys from '../constants/agent-query-keys';
 
 export default function useDeleteAgent(): UseMutationResult<void, Error, string> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient = useQueryClient();
   const {t} = useTranslation('agents');
   const {showToast} = useToast();
 
   return useMutation<void, Error, string>({
     mutationFn: async (agentId: string): Promise<void> => {
-      const serverUrl = getServerUrl();
-      await http.request({
-        url: `${serverUrl}/agents/${agentId}`,
-        method: 'DELETE',
-        headers: {'Content-Type': 'application/json'},
-      } as unknown as Parameters<typeof http.request>[0]);
+      await deleteAgent({...config, agentId});
     },
     onSuccess: (_data, agentId) => {
       queryClient.removeQueries({queryKey: [AgentQueryKeys.AGENT, agentId]});

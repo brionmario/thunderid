@@ -26,6 +26,7 @@ export type {ExternalLinkProps} from './ExternalLink/ExternalLink';
 export {default as OrganizationUnitSummaryChip} from './OrganizationUnitSummaryChip/OrganizationUnitSummaryChip';
 export type {OrganizationUnitSummaryChipProps} from './OrganizationUnitSummaryChip/OrganizationUnitSummaryChip';
 export {default as PageLoader} from './PageLoader/PageLoader';
+export {default as useManagementApiConfig} from './ManagementApi/useManagementApiConfig';
 export {default as QueryErrorNotice} from './QueryErrorNotice/QueryErrorNotice';
 export type {QueryErrorNoticeProps, QueryErrorMessageResolver} from './QueryErrorNotice/QueryErrorNotice';
 export {default as StackblitzQuickstartCard} from './StackblitzQuickstartCard/StackblitzQuickstartCard';
@@ -75,13 +76,11 @@ export {default as ResourceAvatar} from './lab/components/ResourceAvatar';
 export {default as SettingsCard} from './lab/components/SettingsCard';
 export {default as UnsavedChangesBar} from './lab/components/UnsavedChangesBar';
 
-// Account status and the identity lifecycle operations
+// Account status
 export {default as AccessStatusIndicator} from './AccountStatus/AccessStatusIndicator';
 export type {AccessStatusIndicatorProps} from './AccountStatus/AccessStatusIndicator';
 export {default as AccessStatusBanner} from './AccountStatus/AccessStatusBanner';
 export type {AccessStatusBannerProps} from './AccountStatus/AccessStatusBanner';
-export {default as AccountStatusAction} from './AccountStatus/AccountStatusAction';
-export type {AccountStatusActionProps} from './AccountStatus/AccountStatusAction';
 
 // Utils
 export {default as getInitials} from './lab/utils/getInitials';

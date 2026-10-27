@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {addGroupMembers, type GroupMember} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import GroupQueryKeys from '../constants/group-query-keys';
 import type {Member} from '../models/group';
@@ -22,23 +23,14 @@ export interface AddGroupMembersVariables {
  * @returns TanStack Query mutation object for adding group members
  */
 export default function useAddGroupMembers(): UseMutationResult<void, Error, AddGroupMembersVariables> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('groups');
   const {showToast} = useToast();
 
   return useMutation<void, Error, AddGroupMembersVariables>({
     mutationFn: async ({groupId, members}: AddGroupMembersVariables): Promise<void> => {
-      const serverUrl: string = getServerUrl();
-      await http.request({
-        url: `${serverUrl}/groups/${groupId}/members/add`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: {members},
-      } as unknown as Parameters<typeof http.request>[0]);
+      await addGroupMembers({...config, groupId, members: members as GroupMember[]});
     },
     onSuccess: (_data, {groupId}) => {
       queryClient.invalidateQueries({queryKey: [GroupQueryKeys.GROUP, groupId]}).catch(() => {

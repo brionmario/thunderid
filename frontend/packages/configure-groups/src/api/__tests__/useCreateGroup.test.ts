@@ -1,107 +1,72 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor} from '@testing-library/react';
-import {renderHook} from '@thunderid/test-utils';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import type {Group} from '../../models/group';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
+import GroupQueryKeys from '../../constants/group-query-keys';
 import type {CreateGroupRequest} from '../../models/requests';
+import useCreateGroup from '../useCreateGroup';
 
-const mockHttpRequest = vi.fn();
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {request: mockHttpRequest},
-  }),
+const {config, mockCreateGroup, mockShowToast} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockCreateGroup: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
-const mockGetServerUrl = vi.fn<() => string>(() => 'https://localhost:8090');
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({getServerUrl: mockGetServerUrl}),
-  };
-});
-
-const {default: useCreateGroup} = await import('../useCreateGroup');
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({createGroup: mockCreateGroup}));
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useToast: () => ({showToast: mockShowToast}),
+}));
 
 describe('useCreateGroup', () => {
-  const mockGroup: Group = {
-    id: 'g1',
-    name: 'New Group',
-    ouId: 'ou1',
-  };
-
-  const mockRequest: CreateGroupRequest = {
-    name: 'New Group',
-    ouId: 'ou1',
-  };
+  const payload: CreateGroupRequest = {name: 'Platform team', ouId: 'ou-1', members: [{id: 'u1', type: 'user'}]};
+  const created = {id: 'g1', name: 'Platform team', ouId: 'ou-1'};
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
+    mockCreateGroup.mockReset();
+    mockShowToast.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
+  it('should create the group through the SDK with the management config', async () => {
+    mockCreateGroup.mockResolvedValueOnce(created);
 
-  it('should initialize with idle state', () => {
     const {result} = renderHook(() => useCreateGroup());
 
-    expect(result.current.isIdle).toBe(true);
-    expect(result.current.data).toBeUndefined();
+    await expect(result.current.mutateAsync(payload)).resolves.toEqual(created);
+    expect(mockCreateGroup).toHaveBeenCalledWith({...config, payload});
   });
 
-  it('should create a group successfully', async () => {
-    mockHttpRequest.mockResolvedValue({data: mockGroup});
-    const {result} = renderHook(() => useCreateGroup());
+  it('should refresh the groups list and confirm with a toast', async () => {
+    mockCreateGroup.mockResolvedValueOnce(created);
 
-    result.current.mutate(mockRequest);
+    const {result, queryClient} = renderHook(() => useCreateGroup());
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    result.current.mutate(payload);
 
     await waitFor(() => {
-      expect(result.current.data).toEqual(mockGroup);
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://localhost:8090/groups',
-        method: 'POST',
-        data: mockRequest,
-      }),
-    );
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [GroupQueryKeys.GROUPS]});
+    expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
-  it('should handle error', async () => {
-    mockHttpRequest.mockRejectedValue(new Error('Validation failed'));
-    const {result} = renderHook(() => useCreateGroup());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.error).toBeTruthy();
-      expect(result.current.error?.message).toBe('Validation failed');
-    });
-  });
-
-  it('should set pending state during mutation', async () => {
-    let resolveRequest: (value: unknown) => void;
-    const requestPromise = new Promise((resolve) => {
-      resolveRequest = resolve;
-    });
-    mockHttpRequest.mockReturnValue(requestPromise);
+  it('should surface the error without a toast', async () => {
+    const error = new Error('Group already exists');
+    mockCreateGroup.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useCreateGroup());
-    result.current.mutate(mockRequest);
+
+    result.current.mutate(payload);
 
     await waitFor(() => {
-      expect(result.current.isPending).toBe(true);
+      expect(result.current.isError).toBe(true);
     });
 
-    resolveRequest!({data: mockGroup});
-
-    await waitFor(() => {
-      expect(result.current.isPending).toBe(false);
-    });
+    expect(result.current.error).toBe(error);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

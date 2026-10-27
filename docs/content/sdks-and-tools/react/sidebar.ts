@@ -117,8 +117,8 @@ const sidebar: SidebarsConfig = {
             },
             {
               type: 'doc',
-              id: 'sdks-and-tools/react/apis/hooks/management-hooks',
-              label: 'Management Hooks',
+              id: 'sdks-and-tools/react/apis/hooks/management-api',
+              label: 'Management API',
             },
           ],
         },

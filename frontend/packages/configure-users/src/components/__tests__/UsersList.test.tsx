@@ -5,6 +5,7 @@ import {render, screen, waitFor, userEvent} from '@thunderid/test-utils';
 import type * as OxygenUI from '@wso2/oxygen-ui';
 import {DataGrid} from '@wso2/oxygen-ui';
 import React from 'react';
+import type {ReactNode} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import type {UserListResponse} from '../../models/users';
 import UsersList from '../UsersList';
@@ -171,7 +172,32 @@ interface UseGetUsersReturn {
 const mockUseGetUsers = vi.fn<() => UseGetUsersReturn>();
 
 vi.mock('@/api/useGetUsers', () => ({
-  default: () => mockUseGetUsers(),
+  default: () => ({refetch: vi.fn().mockResolvedValue(undefined), ...mockUseGetUsers()}),
+}));
+
+// The SDK's BaseUserList renders through its own provider; this stand-in hands its render props
+// straight to the Console's render function, which is what these tests cover.
+vi.mock('@thunderid/react', async () => ({
+  ...(await vi.importActual<Record<string, unknown>>('@thunderid/react')),
+  BaseUserList: ({
+    children,
+    error = null,
+    isLoading = false,
+    limit = 10,
+    offset = 0,
+    onPageChange = undefined,
+    totalResults = 0,
+    users,
+  }: {
+    children: (props: object) => ReactNode;
+    error?: string | null;
+    isLoading?: boolean;
+    limit?: number;
+    offset?: number;
+    onPageChange?: (offset: number) => void;
+    totalResults?: number;
+    users: unknown[];
+  }): ReactNode => children({error, isLoading, limit, offset, onPageChange, rows: users, totalResults}),
 }));
 
 // The delete flow lives in UserDeleteDialog (covered by its own test). Stub it here so these

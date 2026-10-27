@@ -12,7 +12,11 @@ vi.mock('@thunderid/configure-applications', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@thunderid/configure-applications')>()),
   useGetApplications: vi.fn(),
 }));
-vi.mock('../../../../api/useGetRoleAssignments');
+vi.mock('../../../../api/useGetRoleAssignments', () => ({default: vi.fn()}));
+// The agents tab is not covered here; an empty page keeps the dialog from sending a real request.
+vi.mock('../../../../internal/useGetAgents', () => ({
+  default: () => ({data: {totalResults: 0, startIndex: 1, count: 0, agents: []}, isLoading: false, error: null}),
+}));
 vi.mock('@thunderid/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@thunderid/hooks')>();
   return {

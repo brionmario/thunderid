@@ -8,13 +8,15 @@ import ApplicationCreateProvider from '../ApplicationCreateProvider';
 import useApplicationCreate from '../useApplicationCreate';
 
 // Mock useGetApplications
-const mockUseGetApplications = vi.fn().mockReturnValue({
-  data: {
-    applications: [],
-  },
-});
+const {mockUseGetApplications} = vi.hoisted(() => ({
+  mockUseGetApplications: vi.fn().mockReturnValue({
+    data: {
+      applications: [],
+    },
+  }),
+}));
 
-vi.mock('../../api/useGetApplications', () => ({
+vi.mock('../../../api/useGetApplications', () => ({
   __esModule: true,
   default: mockUseGetApplications,
 }));

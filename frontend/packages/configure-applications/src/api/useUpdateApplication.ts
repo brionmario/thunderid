@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {updateApplication, type UpdateApplicationRequest} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import ApplicationQueryKeys from '../constants/application-query-keys';
 import type {Application} from '../models/application';
@@ -65,28 +66,18 @@ export interface UpdateApplicationVariables {
  * @public
  */
 export default function useUpdateApplication(): UseMutationResult<Application, Error, UpdateApplicationVariables> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('applications');
   const {showToast} = useToast();
 
   return useMutation<Application, Error, UpdateApplicationVariables>({
-    mutationFn: async ({applicationId, data}: UpdateApplicationVariables): Promise<Application> => {
-      const serverUrl: string = getServerUrl();
-      const response: {
-        data: Application;
-      } = await http.request({
-        url: `${serverUrl}/applications/${applicationId}`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: data,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    mutationFn: async ({applicationId, data}: UpdateApplicationVariables): Promise<Application> =>
+      (await updateApplication({
+        ...config,
+        applicationId,
+        payload: data as unknown as UpdateApplicationRequest,
+      })) as unknown as Application,
     onSuccess: (_data, variables) => {
       // Invalidate and refetch the specific application
       queryClient

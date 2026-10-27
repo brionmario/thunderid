@@ -21,30 +21,34 @@ const BLOCKING_DEPENDENCIES_DEFAULT_VALUE =
   'This user cannot be deleted because {{dependencies}} depend on it. Remove or reassign them first.';
 
 /**
- * Reads the error code from either the REST envelope (`response.data.code`) or the embedded
- * flow's variants (`code`, `error.code`), since the user create flow reports failures through a
- * different shape than a plain API mutation. See `UserAddPage`'s `isMissingOnboardingFlow`.
+ * Reads the server's error envelope, which an HTTP client error carries as its response body and an
+ * SDK API error (`ThunderIDAPIError`) as `serverError`.
  */
-function extractErrorCode(error: Error): string | undefined {
+function extractApiError(error: Error): BlockingDependenciesApiError | undefined {
   const candidate = error as Error & {
-    code?: string;
-    error?: {code?: string};
-    response?: {data?: {code?: string}};
+    response?: {data?: BlockingDependenciesApiError};
+    serverError?: BlockingDependenciesApiError;
   };
 
-  return candidate.response?.data?.code ?? candidate.code ?? candidate.error?.code;
+  return candidate.response?.data ?? candidate.serverError;
+}
+
+/**
+ * Reads the error code from the server's error envelope, or from the error itself when it has none.
+ */
+function extractErrorCode(error: Error): string | undefined {
+  return extractApiError(error)?.code ?? (error as Error & {code?: string}).code;
 }
 
 /**
  * Extracts a localized error message from a user API error response, with a dedicated,
- * actionable message for USR-1027 (blocking dependencies) and normalization for the embedded
- * flow's error envelope.
+ * actionable message for USR-1027 (blocking dependencies).
  *
  * For USR-1027, builds the message from the error's `dependencies` param, a human-readable
  * summary (e.g. "2 agent(s)") supplied by the backend. Falls back to {@link getErrorMessage} for
  * every other error, and for USR-1027 responses without usable params.
  *
- * @param error - The error thrown by the mutation, or reported by the embedded create flow
+ * @param error - The error thrown by the mutation
  * @param t - The i18next translation function scoped to the relevant namespace
  * @param fallbackKey - i18n key to use when no specific message is found (e.g. `'delete.error'`)
  * @param fallbackDefaultValue - Default string for `fallbackKey`, per the i18n Fallback Values convention
@@ -61,8 +65,7 @@ export default function getUserErrorMessage(
   const code = extractErrorCode(error);
 
   if (code === BLOCKING_DEPENDENCIES_ERROR_CODE) {
-    const apiError = (error as {response?: {data?: BlockingDependenciesApiError}}).response?.data;
-    const dependencies = apiError?.description?.params?.dependencies;
+    const dependencies = extractApiError(error)?.description?.params?.dependencies;
 
     if (dependencies) {
       return t(`errors.${BLOCKING_DEPENDENCIES_ERROR_CODE}`, {

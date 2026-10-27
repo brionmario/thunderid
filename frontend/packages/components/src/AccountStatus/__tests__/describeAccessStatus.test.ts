@@ -4,8 +4,8 @@
 import enUS from '@thunderid/i18n/locales/en-US';
 import type {AccessStatusReport} from '@thunderid/types';
 import {describe, expect, it} from 'vitest';
+import type AccessStatusCategory from '../accessStatusCategory';
 import describeAccessStatus from '../describeAccessStatus';
-import type {LifecycleCategory} from '../lifecycleAction';
 
 const common = (enUS as unknown as {common: Record<string, string>}).common;
 
@@ -29,7 +29,7 @@ function catalogT(): {t: (key: string, fallback: string, values?: Record<string,
 const EXPIRES_AT = '2026-10-25T10:00:00Z';
 const EXPIRES_AT_TEXT = new Date(EXPIRES_AT).toLocaleString();
 
-const describe_ = (status: AccessStatusReport | undefined, category: LifecycleCategory = 'user') => {
+const describe_ = (status: AccessStatusReport | undefined, category: AccessStatusCategory = 'user') => {
   const {keys, t} = catalogT();
   return {description: describeAccessStatus(status, category, t), keys};
 };
@@ -48,7 +48,7 @@ describe('describeAccessStatus', () => {
     expect(describe_({value: 'DEACTIVATED' as never}).description).toBeNull();
   });
 
-  it.each<[LifecycleCategory, string]>([
+  it.each<[AccessStatusCategory, string]>([
     ['user', 'The account is suspended and cannot sign in until an administrator unsuspends it.'],
     ['agent', 'The agent is suspended and cannot authenticate until an administrator unsuspends it.'],
     ['application', 'The application is suspended and cannot authenticate until an administrator unsuspends it.'],

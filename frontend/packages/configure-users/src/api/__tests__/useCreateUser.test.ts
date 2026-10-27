@@ -1,391 +1,85 @@
 // Copyright 2026 The ThunderID Authors
 // SPDX-License-Identifier: Apache-2.0
 
-import {waitFor, act, renderHook} from '@thunderid/test-utils';
-import type {User} from '@thunderid/types';
-import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {waitFor, renderHook} from '@thunderid/test-utils';
+import {describe, it, expect, beforeEach, vi} from 'vitest';
 import UserQueryKeys from '../../constants/user-query-keys';
 import type {CreateUserRequest} from '../../models/users';
 import useCreateUser from '../useCreateUser';
 
-const mockHttpRequest = vi.fn();
-const mockGetServerUrl = vi.fn().mockReturnValue('https://api.test.com');
-const mockShowToast = vi.fn();
-
-// Mock the dependencies
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({
-    http: {
-      request: mockHttpRequest,
-    },
-  }),
+const {config, mockCreateUser, mockShowToast} = vi.hoisted(() => ({
+  config: {baseUrl: 'https://api.test.com', fetcher: vi.fn()},
+  mockCreateUser: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
-vi.mock('@thunderid/contexts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@thunderid/contexts')>();
-  return {
-    ...actual,
-    useConfig: () => ({
-      getServerUrl: mockGetServerUrl,
-    }),
-    useToast: () => ({
-      showToast: mockShowToast,
-    }),
-  };
-});
+vi.mock('@thunderid/components', () => ({useManagementApiConfig: () => config}));
+vi.mock('@thunderid/react', () => ({createUser: mockCreateUser}));
+vi.mock('@thunderid/contexts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@thunderid/contexts')>()),
+  useToast: () => ({showToast: mockShowToast}),
+}));
 
 describe('useCreateUser', () => {
-  const mockUser: User = {
-    id: 'user-1',
-    ouId: 'ou-1',
-    type: 'Employee',
-    attributes: {username: 'john', email: 'john@test.com'},
-  };
-
-  const mockRequest: CreateUserRequest = {
-    ouId: 'ou-1',
-    type: 'Employee',
-    attributes: {username: 'john', email: 'john@test.com'},
-  };
+  const request: CreateUserRequest = {ouId: 'ou-1', type: 'Employee', attributes: {username: 'john'}};
+  const created = {id: 'user-1', ...request};
 
   beforeEach(() => {
-    mockHttpRequest.mockReset();
-    mockGetServerUrl.mockReset().mockReturnValue('https://api.test.com');
+    mockCreateUser.mockReset();
     mockShowToast.mockReset();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should show a success toast on successful creation', async () => {
-    mockHttpRequest.mockResolvedValueOnce({data: mockUser});
+  it('should create the user through the SDK with the management config', async () => {
+    mockCreateUser.mockResolvedValueOnce(created);
 
     const {result} = renderHook(() => useCreateUser());
 
-    result.current.mutate(mockRequest);
+    await expect(result.current.mutateAsync(request)).resolves.toEqual(created);
+    expect(mockCreateUser).toHaveBeenCalledWith({...config, payload: request});
+  });
+
+  it('should refresh the users list and confirm with a toast', async () => {
+    mockCreateUser.mockResolvedValueOnce(created);
+
+    const {result, queryClient} = renderHook(() => useCreateUser());
+    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+
+    result.current.mutate(request);
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
+    expect(invalidateQueries).toHaveBeenCalledWith({queryKey: [UserQueryKeys.USERS]});
     expect(mockShowToast).toHaveBeenCalledWith(expect.any(String), 'success');
   });
 
-  it('should not show a toast on error', async () => {
-    mockHttpRequest.mockRejectedValueOnce(new Error('Failed to create user'));
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(mockShowToast).not.toHaveBeenCalled();
-  });
-
-  it('should initialize with idle state', () => {
-    const {result} = renderHook(() => useCreateUser());
-
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.error).toBeNull();
-    expect(result.current.isPending).toBe(false);
-    expect(result.current.isIdle).toBe(true);
-    expect(result.current.isSuccess).toBe(false);
-    expect(result.current.isError).toBe(false);
-    expect(typeof result.current.mutate).toBe('function');
-    expect(typeof result.current.mutateAsync).toBe('function');
-  });
-
-  it('should successfully create a user', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(mockUser);
-    expect(result.current.error).toBeNull();
-    expect(result.current.isPending).toBe(false);
-
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.test.com/users',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: mockRequest,
-      }),
-    );
-  });
-
-  it('should set pending state during creation', async () => {
-    let resolveRequest: (value: unknown) => void;
-    const requestPromise = new Promise((resolve) => {
-      resolveRequest = resolve;
-    });
-    mockHttpRequest.mockReturnValue(requestPromise);
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isPending).toBe(true);
-    });
-
-    resolveRequest!({data: mockUser});
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.isPending).toBe(false);
-  });
-
-  it('should handle API error', async () => {
-    const apiError = new Error('Failed to create user');
-
-    mockHttpRequest.mockRejectedValueOnce(apiError);
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toEqual(apiError);
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.isPending).toBe(false);
-  });
-
-  it('should handle network error', async () => {
-    const networkError = new Error('Network request failed');
-
-    mockHttpRequest.mockRejectedValueOnce(networkError);
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toEqual(networkError);
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.isPending).toBe(false);
-  });
-
-  it('should invalidate users query on success', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
+  it('should still succeed when refreshing the list fails', async () => {
+    mockCreateUser.mockResolvedValueOnce(created);
 
     const {result, queryClient} = renderHook(() => useCreateUser());
-    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(invalidateQueriesSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        queryKey: [UserQueryKeys.USERS],
-      }),
-    );
-  });
-
-  it('should handle invalidateQueries rejection gracefully', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
-
-    const {result, queryClient} = renderHook(() => useCreateUser());
-    // Mock invalidateQueries to reject
     vi.spyOn(queryClient, 'invalidateQueries').mockRejectedValueOnce(new Error('Invalidation failed'));
 
-    result.current.mutate(mockRequest);
-
-    // The mutation should still succeed even if invalidateQueries fails
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(mockUser);
-  });
-
-  it('should support mutateAsync for promise-based workflows', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
-
-    const {result} = renderHook(() => useCreateUser());
-
-    const promise = result.current.mutateAsync(mockRequest);
-
-    await expect(promise).resolves.toEqual(mockUser);
+    result.current.mutate(request);
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
-    expect(result.current.data).toEqual(mockUser);
   });
 
-  it('should reject mutateAsync on error', async () => {
-    const apiError = new Error('Creation failed');
-    mockHttpRequest.mockRejectedValueOnce(apiError);
+  it('should surface the error without a toast', async () => {
+    const error = new Error('Conflict');
+    mockCreateUser.mockRejectedValueOnce(error);
 
     const {result} = renderHook(() => useCreateUser());
 
-    const promise = result.current.mutateAsync(mockRequest);
-
-    await expect(promise).rejects.toEqual(apiError);
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-  });
-
-  it('should reset mutation state', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    act(() => {
-      result.current.reset();
-    });
-
-    await waitFor(() => {
-      expect(result.current.data).toBeUndefined();
-    });
-    expect(result.current.error).toBeNull();
-    expect(result.current.isIdle).toBe(true);
-    expect(result.current.isSuccess).toBe(false);
-  });
-
-  it('should handle multiple sequential mutations', async () => {
-    const firstUser = {...mockUser, id: 'first-id'};
-    const secondUser = {...mockUser, id: 'second-id'};
-
-    mockHttpRequest.mockResolvedValueOnce({
-      data: firstUser,
-    });
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-      expect(result.current.data).toEqual(firstUser);
-    });
-
-    mockHttpRequest.mockResolvedValueOnce({
-      data: secondUser,
-    });
-
-    result.current.mutate({...mockRequest, type: 'Contractor'});
-
-    await waitFor(() => {
-      expect(result.current.data).toEqual(secondUser);
-    });
-  });
-
-  it('should use correct server URL from config', async () => {
-    const customServerUrl = 'https://custom-server.com:9090';
-
-    mockGetServerUrl.mockReturnValue(customServerUrl);
-
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(mockHttpRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: `${customServerUrl}/users`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: mockRequest,
-      }),
-    );
-  });
-
-  it('should properly serialize request data as JSON', async () => {
-    mockHttpRequest.mockResolvedValueOnce({
-      data: mockUser,
-    });
-
-    const {result} = renderHook(() => useCreateUser());
-
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const callArgs = mockHttpRequest.mock.calls[0][0];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.data).toEqual(mockRequest);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    expect(callArgs.headers['Content-Type']).toBe('application/json');
-  });
-
-  it('should clear error state on successful retry', async () => {
-    const apiError = new Error('Temporary error');
-    mockHttpRequest.mockRejectedValueOnce(apiError).mockResolvedValueOnce({data: mockUser});
-
-    const {result} = renderHook(() => useCreateUser());
-
-    // First attempt - should fail
-    result.current.mutate(mockRequest);
+    result.current.mutate(request);
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
     });
 
-    expect(result.current.error).toEqual(apiError);
-
-    // Second attempt - should succeed
-    result.current.mutate(mockRequest);
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.error).toBeNull();
-    expect(mockHttpRequest).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBe(error);
+    expect(mockShowToast).not.toHaveBeenCalled();
   });
 });

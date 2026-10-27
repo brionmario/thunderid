@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {updateUser, type UpdateManagedUserRequest} from '@thunderid/react';
 import type {User} from '@thunderid/types';
 import {useTranslation} from 'react-i18next';
 import UserQueryKeys from '../constants/user-query-keys';
@@ -23,29 +24,14 @@ export interface UpdateUserVariables {
  * @returns TanStack Query mutation object for updating users
  */
 export default function useUpdateUser(): UseMutationResult<User, Error, UpdateUserVariables> {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient: ReturnType<typeof useQueryClient> = useQueryClient();
   const {t} = useTranslation('users');
   const {showToast} = useToast();
 
   return useMutation<User, Error, UpdateUserVariables>({
-    mutationFn: async ({userId, data}: UpdateUserVariables): Promise<User> => {
-      const serverUrl: string = getServerUrl();
-
-      const response: {
-        data: User;
-      } = await http.request({
-        url: `${serverUrl}/users/${userId}`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: data,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return response.data;
-    },
+    mutationFn: async ({userId, data}: UpdateUserVariables): Promise<User> =>
+      (await updateUser({...config, payload: data as UpdateManagedUserRequest, userId})) as unknown as User,
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({queryKey: [UserQueryKeys.USER, variables.userId]}).catch(() => {
         // Ignore invalidation errors

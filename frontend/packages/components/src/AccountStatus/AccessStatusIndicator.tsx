@@ -5,8 +5,8 @@ import type {AccessStatus, AccessStatusReport} from '@thunderid/types';
 import {Box, Stack, Tooltip, Typography} from '@wso2/oxygen-ui';
 import {type JSX} from 'react';
 import {useTranslation} from 'react-i18next';
+import type AccessStatusCategory from './accessStatusCategory';
 import describeAccessStatus, {AccessStatuses} from './describeAccessStatus';
-import type {LifecycleCategory} from './lifecycleAction';
 
 export interface AccessStatusIndicatorProps {
   /**
@@ -16,7 +16,7 @@ export interface AccessStatusIndicatorProps {
   /**
    * Identity category, which decides the verb in the hover text. Defaults to `user`.
    */
-  category?: LifecycleCategory;
+  category?: AccessStatusCategory;
   /**
    * Tab order of the indicator. A DataGrid cell passes its own, for the grid's roving focus. Defaults to `0`.
    */

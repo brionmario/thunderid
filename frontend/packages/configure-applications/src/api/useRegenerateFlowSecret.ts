@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import {useMutation, useQueryClient, type UseMutationResult} from '@tanstack/react-query';
-import {useConfig, useToast} from '@thunderid/contexts';
-import {useThunderID} from '@thunderid/react';
+import {useManagementApiConfig} from '@thunderid/components';
+import {useToast} from '@thunderid/contexts';
+import {regenerateFlowSecret} from '@thunderid/react';
 import {useTranslation} from 'react-i18next';
 import ApplicationQueryKeys from '../constants/application-query-keys';
 import type {Application} from '../models/application';
@@ -38,26 +39,6 @@ export interface RegenerateFlowSecretResult {
 }
 
 /**
- * Generates a cryptographically secure Flow Secret.
- *
- * @remarks
- * Matches the backend secret generator (`GenerateOAuth2ClientSecret()`):
- * - 32 random bytes (256 bits of entropy) via the Web Crypto API
- * - Encoded as base64url (URL-safe, no padding), matching Go's `base64.RawURLEncoding`
- *
- * @returns A base64url-encoded 32-byte (256-bit) secret string
- */
-function generateFlowSecret(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-}
-
-/**
  * Custom React hook to regenerate an application's Flow Secret.
  *
  * Unlike the OAuth client secret, the Flow Secret is a top-level application credential and exists
@@ -79,51 +60,14 @@ export default function useRegenerateFlowSecret(): UseMutationResult<
   Error,
   RegenerateFlowSecretVariables
 > {
-  const {http} = useThunderID();
-  const {getServerUrl} = useConfig();
+  const config = useManagementApiConfig();
   const queryClient = useQueryClient();
   const {t} = useTranslation('applications');
   const {showToast} = useToast();
 
   return useMutation<RegenerateFlowSecretResult, Error, RegenerateFlowSecretVariables>({
-    mutationFn: async ({applicationId}: RegenerateFlowSecretVariables): Promise<RegenerateFlowSecretResult> => {
-      const serverUrl: string = getServerUrl();
-
-      // Step 1: Fetch the current application details
-      const getResponse: {data: Application} = await http.request({
-        url: `${serverUrl}/applications/${applicationId}`,
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      const currentApplication = getResponse.data;
-
-      // Step 2: Generate a new Flow Secret
-      const newFlowSecret = generateFlowSecret();
-
-      // Step 3: Prepare the update request with the new Flow Secret at the top level.
-      // Destructure to remove server-generated fields.
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const {id, createdAt, updatedAt, flowSecret, ...applicationUpdate}: Application = currentApplication;
-      const updateRequest = {...applicationUpdate, flowSecret: newFlowSecret};
-
-      // Step 4: Update the application with the new Flow Secret
-      const updateResponse: {data: Application} = await http.request({
-        url: `${serverUrl}/applications/${applicationId}`,
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        data: updateRequest,
-      } as unknown as Parameters<typeof http.request>[0]);
-
-      return {
-        application: updateResponse.data,
-        flowSecret: newFlowSecret,
-      };
-    },
+    mutationFn: async ({applicationId}: RegenerateFlowSecretVariables): Promise<RegenerateFlowSecretResult> =>
+      (await regenerateFlowSecret({...config, applicationId})) as unknown as RegenerateFlowSecretResult,
     onSuccess: (_data, variables) => {
       queryClient
         .invalidateQueries({queryKey: [ApplicationQueryKeys.APPLICATION, variables.applicationId]})
