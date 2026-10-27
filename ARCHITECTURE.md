@@ -2,7 +2,7 @@
 
 Open-source IAM stack (`github.com/thunder-id/thunderid`). Two builds of one codebase, each a single Go binary serving a REST API and React SPAs:
 
-- **Data plane** (`backend/cmd/server`): where users authenticate. Issues tokens, runs the login flows, and serves `/gate` (login), `/console` and, for a data plane a control plane manages, the Admin Console. It also takes configuration pushed by a control plane through its management API (`/import`, `/variables`, `/secrets`).
+- **Data plane** (`backend/cmd/server`): where users authenticate. Issues tokens, runs the login flows, and serves `/gate` (login), `/console`, `/admin` (the Admin App, where the admins of an organization unit manage its users, groups, roles and agents) and `/account` (the Account App, where users manage their own profile). It also takes configuration pushed by a control plane through its management API (`/import`, `/variables`, `/secrets`).
 - **Control plane** (`backend/cmd/cpserver`): where configuration is authored. Serves the management APIs and `/console` (`console-cp`), and serves no authentication traffic. It captures versions of its configuration and applies them to the gateways (data planes) it manages. Its console signs in through a data plane acting as a trusted issuer.
 
 A control plane can manage many data planes. See [docs/static/assets/images/readme/architecture.svg](docs/static/assets/images/readme/architecture.svg), the editable source of the diagram in the README.
@@ -29,7 +29,8 @@ frontend/apps/
   gate/         # login/registration SPA  (@thunderid/react — app-native mode)
   console/      # admin SPA               (@thunderid/react — redirect mode)
   console-cp/   # control plane admin SPA (runs every operation as a direct API call)
-  admin-console/# data plane admin SPA    (users, agents, groups, roles)
+  admin/        # Admin App               (users, groups, roles, agents; @thunderid/manage-* on the React SDK)
+  account/      # Account App             (the signed-in user's profile and credentials)
 frontend/packages/      # @thunderid/contexts · design · hooks · i18n · utils · types · logger
 samples/apps/           # react-sdk-sample · react-api-based-sample · vanilla-sample · wayfinder-sample
 ```
@@ -37,7 +38,7 @@ samples/apps/           # react-sdk-sample · react-api-based-sample · vanilla-
 ## Backend patterns
 
 - Each domain package: `handler → service → store`, single `Initialize(mux, …)` in `init.go`.
-- Public paths (no JWT): `/auth/**`, `/flow/execute/**`, `/oauth2/**`, `/.well-known/openid-configuration/**`, `/.well-known/oauth-authorization-server/**`, `/.well-known/oauth-protected-resource`, `/gate/**`, `/console/**`, `/mcp/**`. Full list in `system/security/permissions.go`.
+- Public paths (no JWT): `/auth/**`, `/flow/execute/**`, `/oauth2/**`, `/.well-known/openid-configuration/**`, `/.well-known/oauth-authorization-server/**`, `/.well-known/oauth-protected-resource`, `/gate/**`, `/console/**`, `/admin/**`, `/account/**`, `/mcp/**`. Full list in `system/security/permissions.go`.
 - Errors: `serviceerror.ServiceError` internally; `sysutils.WriteErrorResponse(w, status, errConst)` for HTTP.
 
 ## Flow engine

@@ -57,7 +57,7 @@ echo ""
 #   authenticates it (ADMIN_USERNAME / ADMIN_PASSWORD, the names auth-dp's setup already reads).
 #
 #   Service Desk Admin: authored on the Control Plane and synced to the managed Data Plane, where it
-#   signs into the Admin Console. Both planes get the same account, so the Data Plane has it from
+#   signs into the Admin App. Both planes get the same account, so the Data Plane has it from
 #   the start and the Control Plane's copy arrives on the first sync unchanged
 #   (SERVICE_DESK_USERNAME / SERVICE_DESK_PASSWORD).
 #
@@ -138,7 +138,7 @@ echo "⚙️  Setting up auth-dp (backs the Control Plane's own sign-in)..."
 # nothing of its own: all three end up presenting the identical TLS certificate, and — just as
 # important for the Control Plane — signing with the identical JWT signing keys. That second part
 # is what lets a token auth-dp issued (the Control Plane mints none of its own, and the managed
-# Data Plane issues its own, independent tokens for its own Gate/Admin Console) verify on the
+# Data Plane issues its own, independent tokens for its own Gate, Console and Admin App) verify on the
 # Control Plane too, once its deployment.yaml is patched (at package time) to claim auth-dp's
 # issuer as its own.
 echo ""
@@ -166,7 +166,7 @@ echo "⚙️  Setting up the managed Data Plane..."
 
 echo ""
 echo "⚙️  Setting up the Control Plane, and registering the managed Data Plane as its gateway..."
-# The Data Plane's own console is its own application (ADMIN_CONSOLE), bootstrapped from the same
+# The Data Plane's Admin App is its own application (ADMIN_CONSOLE), bootstrapped from the same
 # file on the Data Plane and here with the same fixed ID, so the copy this Control Plane syncs
 # replaces the Data Plane's rather than duplicating it.
 (cd cp && ADMIN_USERNAME="$SERVICE_DESK_USERNAME" ADMIN_PASSWORD="$SERVICE_DESK_PASSWORD" ./setup-cp.sh)

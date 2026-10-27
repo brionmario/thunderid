@@ -161,13 +161,14 @@ $SECURITY_DIR = "config/certs"
 $FRONTEND_BASE_DIR = "frontend"
 $GATE_APP_DIST_DIR = "apps/gate"
 $CONSOLE_APP_DIST_DIR = "apps/console"
+$ADMIN_APP_DIST_DIR = "apps/admin"
+$ACCOUNT_APP_DIST_DIR = "apps/account"
 $FRONTEND_GATE_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/gate"
 $FRONTEND_CONSOLE_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/console"
+$FRONTEND_ADMIN_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/admin"
+$FRONTEND_ACCOUNT_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/account"
 # The console the Control Plane serves, packaged into the same apps/console slot.
 $FRONTEND_CONSOLE_CP_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/console-cp"
-# The Data Plane's own admin app (Users, Agents, Groups, Roles). Only the quickstart's managed Data
-# Plane ships it, in place of the full console, in the same apps/console slot.
-$FRONTEND_ADMIN_CONSOLE_APP_SOURCE_DIR = Join-Path $FRONTEND_BASE_DIR "apps/admin-console"
 $SAMPLE_BASE_DIR = "samples"
 $VANILLA_SAMPLE_APP_DIR = Join-Path $SAMPLE_BASE_DIR "apps/vanilla-sample"
 $REACT_SDK_SAMPLE_APP_DIR = Join-Path $SAMPLE_BASE_DIR "apps/react-sdk-sample"
@@ -185,7 +186,8 @@ $QUICKSTART_BUNDLE_STAGE_DIR = Join-Path $FRONTEND_CONSOLE_APP_SOURCE_DIR "src/d
 # Default ports
 $GATE_APP_DEFAULT_PORT = 5190
 $CONSOLE_APP_DEFAULT_PORT = 5191
-$ADMIN_CONSOLE_APP_DEFAULT_PORT = 5192
+$ADMIN_APP_DEFAULT_PORT = 5192
+$ACCOUNT_APP_DEFAULT_PORT = 5193
 $QUICKSTART_AUTH_DP_PORT = 8091
 $QUICKSTART_CP_PORT = 8095
 $DOCS_DEFAULT_PORT = 3000
@@ -764,6 +766,8 @@ function Prepare-Frontend-For-Packaging {
     $package_folder = Join-Path $DIST_DIR $PRODUCT_FOLDER
     New-Item -Path (Join-Path $package_folder $GATE_APP_DIST_DIR) -ItemType Directory -Force | Out-Null
     New-Item -Path (Join-Path $package_folder $CONSOLE_APP_DIST_DIR) -ItemType Directory -Force | Out-Null
+    New-Item -Path (Join-Path $package_folder $ADMIN_APP_DIST_DIR) -ItemType Directory -Force | Out-Null
+    New-Item -Path (Join-Path $package_folder $ACCOUNT_APP_DIST_DIR) -ItemType Directory -Force | Out-Null
 
     # Copy gate app build output
     if (Test-Path (Join-Path $FRONTEND_GATE_APP_SOURCE_DIR "dist")) {
@@ -781,6 +785,24 @@ function Prepare-Frontend-For-Packaging {
     }
     else {
         Write-Host "Warning: Console app build output not found at $((Join-Path $FRONTEND_CONSOLE_APP_SOURCE_DIR "dist"))"
+    }
+
+    # Copy Admin App build output
+    if (Test-Path (Join-Path $FRONTEND_ADMIN_APP_SOURCE_DIR "dist")) {
+        Write-Host "Copying Admin App build output..."
+        Copy-Item -Path (Join-Path $FRONTEND_ADMIN_APP_SOURCE_DIR "dist\*") -Destination (Join-Path $package_folder $ADMIN_APP_DIST_DIR) -Recurse -Force
+    }
+    else {
+        Write-Host "Warning: Admin App build output not found at $((Join-Path $FRONTEND_ADMIN_APP_SOURCE_DIR "dist"))"
+    }
+
+    # Copy Account App build output
+    if (Test-Path (Join-Path $FRONTEND_ACCOUNT_APP_SOURCE_DIR "dist")) {
+        Write-Host "Copying Account App build output..."
+        Copy-Item -Path (Join-Path $FRONTEND_ACCOUNT_APP_SOURCE_DIR "dist\*") -Destination (Join-Path $package_folder $ACCOUNT_APP_DIST_DIR) -Recurse -Force
+    }
+    else {
+        Write-Host "Warning: Account App build output not found at $((Join-Path $FRONTEND_ACCOUNT_APP_SOURCE_DIR "dist"))"
     }
 
     Write-Host "================================================================"
@@ -814,7 +836,6 @@ function Package {
 
     Prepare-Frontend-For-Packaging
     Prepare-Backend-For-Packaging
-    Prepare-Admin-Console-For-Packaging -PackDir $package_folder
 
     # Copy the appropriate startup and setup scripts based on the target OS
     if ($GO_OS -eq "windows") {
@@ -883,6 +904,10 @@ function Prepare-Cp-Backend-For-Packaging {
     Copy-Item -Path (Join-Path $BACKEND_DIR "bootstrap") -Destination $package_folder -Recurse -Force
     # Never ship the dev-only CORS seed that Run stages into the source bootstrap dir.
     Remove-Item -Path (Join-Path $package_folder "bootstrap/03-dev-server-configurations.yaml") -Force -ErrorAction SilentlyContinue
+    # A Control Plane serves neither the Admin App nor the Account App, and their default applications
+    # are addressed by its own URL, which a sync would carry to every Data Plane it manages.
+    Remove-BootstrapApplication -PlaneDir $package_folder -ClientId ADMIN_CONSOLE
+    Remove-BootstrapApplication -PlaneDir $package_folder -ClientId ACCOUNT
 
     # Key material is not generated into the distribution; setup-cp.ps1 generates it per deployment.
 }
@@ -907,27 +932,6 @@ function Prepare-Cp-Frontend-For-Packaging {
     }
 
     Write-Host "================================================================"
-}
-
-# Prepare-Admin-Console-For-Packaging replaces the full console in the Data Plane folder named by
-# $PackDir with the admin console (Users, Agents, Groups, Roles). Applications, connections, flows
-# and roles are authored on a Control Plane, so a Data Plane only needs what manages its own local
-# identity data.
-function Prepare-Admin-Console-For-Packaging {
-    param([string]$PackDir)
-
-    Write-Host "Replacing the Console with the Admin Console in $PackDir..."
-    $console_dir = Join-Path $PackDir $CONSOLE_APP_DIST_DIR
-    Remove-Item -Path $console_dir -Recurse -Force -ErrorAction SilentlyContinue
-    New-Item -Path $console_dir -ItemType Directory -Force | Out-Null
-
-    $dist = Join-Path $FRONTEND_ADMIN_CONSOLE_APP_SOURCE_DIR "dist"
-    if (Test-Path $dist) {
-        Copy-Item -Path (Join-Path $dist "*") -Destination $console_dir -Recurse -Force
-    }
-    else {
-        Write-Host "Warning: Admin Console build output not found at $dist"
-    }
 }
 
 # Package-Cp mirrors Package for the Control Plane: a ready-to-run distribution with its own
@@ -993,11 +997,11 @@ function Add-QuickstartLine {
     Write-QuickstartFile -Path $Path -Content ($out -join "`n")
 }
 
-# Remove-ConsoleApplication drops the default CONSOLE application from a plane's copy of
-# 01-default-resources.yaml. Documents are split on "---"; the one declaring clientId CONSOLE is
-# skipped.
-function Remove-ConsoleApplication {
-    param([string]$PlaneDir)
+# Remove-BootstrapApplication drops the default application with the client ID $ClientId from a
+# plane's copy of 01-default-resources.yaml. Documents are split on "---"; the one declaring that
+# clientId is skipped.
+function Remove-BootstrapApplication {
+    param([string]$PlaneDir, [string]$ClientId)
 
     $path = Join-Path $PlaneDir "bootstrap/01-default-resources.yaml"
     $docs = New-Object System.Collections.Generic.List[string]
@@ -1007,13 +1011,13 @@ function Remove-ConsoleApplication {
         $doc += "$line`n"
     }
     if ($doc -ne "") { $docs.Add($doc) }
-    $kept = $docs | Where-Object { $_ -notmatch "clientId: CONSOLE`n" }
+    $kept = $docs | Where-Object { -not $_.Contains("clientId: $ClientId`n") }
     Write-QuickstartFile -Path $path -Content (($kept -join "") )
 }
 
 # Set-QuickstartServiceDeskAdmin makes a plane's default resources create the quickstart's
 # Service Desk Admin instead of the default admin: an account authored on the Control Plane and
-# synced to the Data Plane, where it signs into the Admin Console. It is applied to the Control
+# synced to the Data Plane, where it signs into the Admin App. It is applied to the Control
 # Plane and the Data Plane alike, so the Data Plane holds the account from the start and the
 # Control Plane's copy, the same resource under the same ID, arrives on the first sync unchanged.
 #
@@ -1096,7 +1100,6 @@ function Package-Quickstart {
         $script:PRODUCT_FOLDER = "$QUICKSTART_PRODUCT_FOLDER/dp"
         Prepare-Frontend-For-Packaging
         Prepare-Backend-For-Packaging
-        Prepare-Admin-Console-For-Packaging -PackDir $dp_dir
 
         $script:CP_PRODUCT_FOLDER = "$QUICKSTART_PRODUCT_FOLDER/cp"
         Prepare-Cp-Frontend-For-Packaging
@@ -1132,13 +1135,12 @@ function Package-Quickstart {
     # Control Plane's browser session, so it needs no such allowlist.
     Copy-Item -Path (Join-Path $QUICKSTART_BOOTSTRAP_DIR "auth-dp/*.yaml") -Destination (Join-Path $auth_dp_dir "bootstrap") -Force
 
-    # No plane in this pack uses the default CONSOLE application: auth-dp only signs operators
-    # into the Control Plane's console, so it carries just that console's own client and serves no
-    # console UI; the Control Plane's console signs in through auth-dp; and the managed dp's admin
-    # console has its own ADMIN_CONSOLE client. It is dropped from every bootstrap.
-    Remove-ConsoleApplication -PlaneDir $auth_dp_dir
-    Remove-ConsoleApplication -PlaneDir $dp_dir
-    Remove-ConsoleApplication -PlaneDir $cp_dir
+    # auth-dp only signs operators into the Control Plane's console, so it carries just that
+    # console's own client and serves no console UI, and the Control Plane's console signs in
+    # through auth-dp. Neither needs the default CONSOLE application. The managed dp keeps it for
+    # its own Console.
+    Remove-BootstrapApplication -PlaneDir $auth_dp_dir -ClientId CONSOLE
+    Remove-BootstrapApplication -PlaneDir $cp_dir -ClientId CONSOLE
 
     Set-QuickstartServiceDeskAdmin -PlaneDir $dp_dir
     Set-QuickstartServiceDeskAdmin -PlaneDir $cp_dir
@@ -1154,17 +1156,13 @@ function Package-Quickstart {
             "identifier: https://localhost:$QUICKSTART_CP_PORT"))
     Remove-Item -Path (Join-Path $auth_dp_dir $CONSOLE_APP_DIST_DIR) -Recurse -Force -ErrorAction SilentlyContinue
 
-    # Layer the Data Plane's own admin console application onto the managed dp and the cp. It is
-    # the same resource, with the same fixed ID, on both: the cp is where it is administered and
-    # synced from, and the dp needs it to exist before the first sync so its console can sign in.
+    # Layer the Data Plane's Admin App application onto the managed dp and the cp, in place of the
+    # default one, whose URL would name each plane's own address. It is the same resource, with the
+    # same fixed ID, on both: the cp is where it is administered and synced from, and the dp needs it
+    # to exist before the first sync so the Admin App can sign in.
+    Remove-BootstrapApplication -PlaneDir $dp_dir -ClientId ADMIN_CONSOLE
     Copy-Item -Path (Join-Path $QUICKSTART_BOOTSTRAP_DIR "dp-cp/*.yaml") -Destination (Join-Path $dp_dir "bootstrap") -Force
     Copy-Item -Path (Join-Path $QUICKSTART_BOOTSTRAP_DIR "dp-cp/*.yaml") -Destination (Join-Path $cp_dir "bootstrap") -Force
-
-    # The managed dp's admin console signs in with its own ADMIN_CONSOLE client rather than the
-    # CONSOLE one every other copy of this app (auth-dp, a standalone Data Plane) uses.
-    $dp_console_config = Join-Path $dp_dir "$CONSOLE_APP_DIST_DIR/config.js"
-    Write-QuickstartFile -Path $dp_console_config -Content ((Read-QuickstartFile $dp_console_config).Replace(
-            "client_id: 'CONSOLE'", "client_id: 'ADMIN_CONSOLE'"))
 
     # auth-dp runs on its own port, distinct from the managed dp it shares a generated certificate
     # and signing keys with (see quickstart/setup.ps1). Patched into this copy of deployment.yaml
@@ -1214,7 +1212,6 @@ function Package-Quickstart {
     Assert-QuickstartPatch (Join-Path $auth_dp_dir "deployment.yaml") "port: $QUICKSTART_AUTH_DP_PORT"
     Assert-QuickstartPatch (Join-Path $dp_dir "bootstrap/01-default-resources.yaml") "Service Desk Administrators"
     Assert-QuickstartPatch (Join-Path $cp_dir "bootstrap/01-default-resources.yaml") "Service Desk Administrators"
-    Assert-QuickstartPatch (Join-Path $dp_dir "$CONSOLE_APP_DIST_DIR/config.js") "client_id: 'ADMIN_CONSOLE'"
     Assert-QuickstartPatch (Join-Path $dp_dir "deployment.yaml") "  security:"
     Assert-QuickstartPatch (Join-Path $cp_dir "deployment.yaml") "issuer: `"https://localhost:$QUICKSTART_AUTH_DP_PORT`""
     Assert-QuickstartPatch (Join-Path $cp_dir "$CONSOLE_APP_DIST_DIR/config.js") "trusted_issuer"
@@ -2065,7 +2062,7 @@ function Run {
     Write-Host "⚙️  Creating default resources..."
     Write-Host ""
 
-    # Dev-only: seed CORS allowed origins for the Gate and Console apps so they can call
+    # Dev-only: seed CORS allowed origins for the Gate, Console, Admin and Account apps so they can call
     # the backend without manual configuration. Regenerated on every run and picked up by
     # the bootstrap one-shot; it is git-ignored and never packaged (see Build).
     $devServerConfig = @"
@@ -2075,7 +2072,8 @@ value:
   allowedOrigins:
     - "https://localhost:$GATE_APP_DEFAULT_PORT"
     - "https://localhost:$CONSOLE_APP_DEFAULT_PORT"
-    - "https://localhost:$ADMIN_CONSOLE_APP_DEFAULT_PORT"
+    - "https://localhost:$ADMIN_APP_DEFAULT_PORT"
+    - "https://localhost:$ACCOUNT_APP_DEFAULT_PORT"
 "@
     Set-Content -Path (Join-Path $BACKEND_DIR "bootstrap/03-dev-server-configurations.yaml") -Value $devServerConfig
 
@@ -2086,9 +2084,7 @@ value:
     $env:ADMIN_PASSWORD = if ($env:ADMIN_PASSWORD) { $env:ADMIN_PASSWORD } else { "admin" }
     Push-Location $BACKEND_DIR
     try {
-        # Both the Console and Admin Console dev servers use the same CONSOLE OAuth2 client, each on
-        # its own origin, so both need a registered redirect URI here.
-        & go run . bootstrap --console-redirect-uris "https://localhost:${CONSOLE_APP_DEFAULT_PORT}/console,https://localhost:${ADMIN_CONSOLE_APP_DEFAULT_PORT}/console"
+        & go run . bootstrap --console-redirect-uris "https://localhost:${CONSOLE_APP_DEFAULT_PORT}/console" --admin-redirect-uris "https://localhost:${ADMIN_APP_DEFAULT_PORT}/admin" --account-redirect-uris "https://localhost:${ACCOUNT_APP_DEFAULT_PORT}/account"
         $bootstrapExit = $LASTEXITCODE
     }
     finally {
@@ -2109,7 +2105,8 @@ value:
     Write-Host "  📱 Frontend :"
     Write-Host "      🚪 Gate (Login/Register): https://localhost:${GATE_APP_DEFAULT_PORT}/gate"
     Write-Host "      🛠️  Console (System Management): https://localhost:${CONSOLE_APP_DEFAULT_PORT}/console"
-    Write-Host "      🛠️  Admin Console (Users, Agents, Groups, Roles): https://localhost:${ADMIN_CONSOLE_APP_DEFAULT_PORT}/console"
+    Write-Host "      🧩 Admin App (Organization Management): https://localhost:${ADMIN_APP_DEFAULT_PORT}/admin"
+    Write-Host "      👤 Account App (Self Service): https://localhost:${ACCOUNT_APP_DEFAULT_PORT}/account"
     Write-Host ""
 
     Write-Host "Press Ctrl+C to stop."
@@ -2223,7 +2220,7 @@ function Run-Frontend {
         # In dev the apps are served on their own origins, so point them at the backend via
         # THUNDERID_DEV_SERVER_URL (injected into __DEV_SERVER_URL__; applied only in dev builds).
         $env:THUNDERID_DEV_SERVER_URL = $PUBLIC_URL
-        $frontendProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "pnpm", "-r", "--parallel", "--filter", "@thunderid/console", "--filter", "@thunderid/gate", "--filter", "@thunderid/admin-console", "dev" -PassThru -NoNewWindow
+        $frontendProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "pnpm", "-r", "--parallel", "--filter", "@thunderid/console", "--filter", "@thunderid/gate", "--filter", "@thunderid/admin", "--filter", "@thunderid/account", "dev" -PassThru -NoNewWindow
         $script:FRONTEND_PID = $frontendProcess.Id
     }
     finally {

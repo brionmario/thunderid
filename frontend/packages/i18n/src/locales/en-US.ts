@@ -832,6 +832,78 @@ const translations = {
   },
 
   // ============================================================================
+  // Apps namespace - shared by the Admin App and the Account App
+  // ============================================================================
+  apps: {
+    'brand.organizationUnit.label': 'Organization unit',
+    'brand.organizationUnit.badge': 'OU',
+  },
+
+  // ============================================================================
+  // Manage namespace - Admin App shell translations
+  // ============================================================================
+  manage: {
+    'app.title': 'Admin App',
+    title: 'Admin',
+    'nav.label': 'Admin App',
+    'nav.users': 'Users',
+    'nav.groups': 'Groups',
+    'nav.roles': 'Roles',
+    'nav.agents': 'Agents',
+    'actions.add': 'Add',
+    'actions.add.users': 'Add people',
+    'actions.invite.users': 'Invite people',
+    'actions.add.groups': 'New group',
+    'actions.add.roles': 'New role',
+    'actions.add.agents': 'Register agent',
+    'users.titleIn': 'People in {{organization}}',
+    'groups.titleIn': 'Groups in {{organization}}',
+    'roles.titleIn': 'Roles in {{organization}}',
+    'agents.titleIn': 'Agents in {{organization}}',
+    'actions.back': 'Back',
+    'create.users': 'Add a user',
+    'create.groups': 'Create a group',
+    'create.roles': 'Create a role',
+    'create.agents': 'Register an agent',
+    'userMenu.signOut': 'Sign out',
+    'users.description': 'Everyone who can sign in through this organization unit.',
+    'groups.description': 'Give roles to many people at once. Members inherit every role on the group.',
+    'roles.description': 'Assign roles to people, groups and agents in this organization unit.',
+    'agents.description': 'AI agents that act for this organization unit.',
+    'notFound.title': 'Page not found',
+    'notFound.action': 'Go to users',
+    loading: 'Loading',
+    'empty.title': 'Nothing to manage yet',
+    'empty.description': 'Your administrator has not turned on any pages for this app.',
+  },
+
+  // ============================================================================
+  // Account namespace - Account App shell translations
+  // ============================================================================
+  account: {
+    title: 'Account',
+    'nav.label': 'Account',
+    'nav.home': 'Home',
+    'nav.profile': 'Personal info',
+    'nav.security': 'Security',
+    'userMenu.signOut': 'Sign out',
+    'home.greeting': 'Welcome, {{name}}',
+    'home.fallbackName': 'there',
+    'home.subtitle': 'Manage your info and security across your apps.',
+    'home.cards.profile.title': 'Personal info',
+    'home.cards.profile.description': 'Your name, email, phone and the other details your apps know you by',
+    'home.cards.profile.action': 'Manage your personal info',
+    'home.cards.security.title': 'Security',
+    'home.cards.security.description': 'Your password and the other ways you sign in',
+    'home.cards.security.action': 'Manage your security',
+    'profile.subtitle': 'Manage the basic profile info others may see.',
+    'security.subtitle': 'Manage your password and other credentials.',
+    'security.password.title': 'Password',
+    'security.password.description': 'Used to sign in to your account.',
+    'security.nothing': 'There is nothing you can change here yet.',
+  },
+
+  // ============================================================================
   // Users namespace - User management feature translations
   // ============================================================================
   users: {
