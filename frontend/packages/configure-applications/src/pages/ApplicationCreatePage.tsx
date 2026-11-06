@@ -129,6 +129,8 @@ export default function ApplicationCreatePage(): JSX.Element {
 
   const isCimdTemplate = selectedTemplateConfig?.id === TemplateConstants.CIMD_TEMPLATE_ID;
   const [mcpIdentityMode, setMcpIdentityMode] = useState<McpClientIdentityMode | null>(null);
+  // Whether a user-delegated MCP client is created confidential (issued a client secret) rather than public.
+  const [mcpConfidentialClient, setMcpConfidentialClient] = useState(false);
   const [cimdPreview, setCimdPreview] = useState<CimdPreview | null>(null);
 
   // The approved metadata document supplies the client's name, so the Details step starts from it.
@@ -672,8 +674,9 @@ export default function ApplicationCreatePage(): JSX.Element {
 
     // The mcp-client template branches the oauth2 config off the template-seeded config (never
     // rebuilt from scratch): user-delegated keeps the seeded authorization_code/refresh_token/PKCE/
-    // public-client shape and adds the collected redirect URIs; machine-to-machine overrides it to a
-    // confidential client_credentials shape with no redirect URIs.
+    // public-client shape and adds the collected redirect URIs, switching to a confidential client
+    // when chosen; machine-to-machine overrides it to a confidential client_credentials shape with
+    // no redirect URIs.
     const mcpOAuth2Config: OAuth2Config | null =
       isMcpClientTemplate && oauthConfig
         ? mcpClientType === McpClientTypes.M2M
@@ -686,7 +689,14 @@ export default function ApplicationCreatePage(): JSX.Element {
               publicClient: false,
               tokenEndpointAuthMethod: TokenEndpointAuthMethods.CLIENT_SECRET_BASIC,
             }
-          : {...oauthConfig, redirectUris: mcpRedirectUris.filter((uri) => uri.trim() !== '')}
+          : {
+              ...oauthConfig,
+              redirectUris: mcpRedirectUris.filter((uri) => uri.trim() !== ''),
+              ...(mcpConfidentialClient && {
+                publicClient: false,
+                tokenEndpointAuthMethod: TokenEndpointAuthMethods.CLIENT_SECRET_BASIC,
+              }),
+            }
         : null;
 
     const applicationData: CreateApplicationRequest = {
@@ -767,17 +777,6 @@ export default function ApplicationCreatePage(): JSX.Element {
               },
             },
           );
-        }
-
-        // The mcp-client template has no completion step of its own, so it always goes straight
-        // to the created application's detail page.
-        if (isMcpClientTemplate) {
-          (async () => {
-            await navigate(routes.applications.detail(createdApp.id));
-          })().catch((_error: unknown) => {
-            logger.error('Failed to navigate to application details', {error: _error, applicationId: createdApp.id});
-          });
-          return;
         }
 
         const oauth2Config = createdApp.inboundAuthConfig?.find((config) => config.type === 'oauth2');
@@ -861,10 +860,17 @@ export default function ApplicationCreatePage(): JSX.Element {
         smsOtpSenderId,
       };
 
+      // The generated flow belongs to the organization unit of the application.
+      const flowOuId = hasMultipleOUs ? ouId : ouList[0]?.id;
+      if (!flowOuId) {
+        setError(t('flows:create.organizationUnit.required', 'Organization unit is required'));
+        return;
+      }
+
       // Generation randomizes the flow handle so retries never collide, which also means a retry
-      // always mints a duplicate. Keying the generated flow on its inputs is what makes the retry
-      // reuse it: same inputs, same flow.
-      const inputsKey = JSON.stringify(flowInputs);
+      // always mints a duplicate. Keying the generated flow on its inputs and owning OU is what
+      // makes the retry reuse it: same inputs, same OU, same flow.
+      const inputsKey = JSON.stringify({...flowInputs, flowOuId});
       const memoizedFlow = generatedFlowRef.current;
 
       if (memoizedFlow?.inputsKey === inputsKey) {
@@ -872,13 +878,13 @@ export default function ApplicationCreatePage(): JSX.Element {
         return;
       }
 
-      // The inputs changed since the last attempt (an edited application name, a toggled
-      // integration), so the flow generated then is stale and unreferenced.
+      // The inputs (or the organization unit) changed since the last attempt, so the flow
+      // generated then is stale and unreferenced.
       if (memoizedFlow) {
         rollbackGeneratedFlow(memoizedFlow);
       }
 
-      const generatedFlowRequest = generateFlowGraph(flowInputs);
+      const generatedFlowRequest = {...generateFlowGraph(flowInputs), ouId: flowOuId};
 
       createFlow.mutate(generatedFlowRequest, {
         onSuccess: (savedFlow) => {
@@ -1062,6 +1068,8 @@ export default function ApplicationCreatePage(): JSX.Element {
             onSelect={setMcpClientType}
             redirectUris={mcpRedirectUris}
             onRedirectUrisChange={setMcpRedirectUris}
+            confidentialClient={mcpConfidentialClient}
+            onConfidentialClientChange={setMcpConfidentialClient}
             onReadyChange={handleClientTypeStepReadyChange}
           />
         );

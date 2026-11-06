@@ -17,12 +17,16 @@ import (
 	authnprovidercm "github.com/thunder-id/thunderid/internal/authnprovider/common"
 	"github.com/thunder-id/thunderid/internal/entitytype"
 	"github.com/thunder-id/thunderid/internal/identitygovernance"
+	"github.com/thunder-id/thunderid/internal/ou"
+	"github.com/thunder-id/thunderid/internal/sharing"
 	"github.com/thunder-id/thunderid/internal/system/cryptolib"
 	"github.com/thunder-id/thunderid/internal/system/transaction"
+	tidcommon "github.com/thunder-id/thunderid/pkg/thunderidengine/common"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 	"github.com/thunder-id/thunderid/tests/mocks/crypto/hashmock"
 	"github.com/thunder-id/thunderid/tests/mocks/entitytypemock"
 	"github.com/thunder-id/thunderid/tests/mocks/oumock"
+	"github.com/thunder-id/thunderid/tests/mocks/sharingmock"
 	"github.com/thunder-id/thunderid/tests/mocks/transactionmock"
 )
 
@@ -54,7 +58,7 @@ func (s *ServiceTestSuite) SetupTest() {
 			Salt: "testsalt", Iterations: 1, KeySize: 32,
 		},
 	}, nil).Maybe()
-	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner())
+	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner(), nil)
 	s.ctx = context.Background()
 	s.testErr = errors.New("store error")
 }
@@ -120,7 +124,7 @@ func (s *ServiceTestSuite) TestCreateEntity_LinkedAccount() {
 	s.store.AssertNotCalled(s.T(), "ResolveLinkedAccounts", mock.Anything, mock.Anything, mock.Anything)
 }
 
-// A caller-supplied id a declarative entity holds is refused, so its runtime row is not reset.
+// A caller-supplied id a declarative account holds is refused, so its runtime row is not reset.
 func (s *ServiceTestSuite) TestCreateEntity_RefusesADeclarativeID() {
 	svc, runtime := s.newServiceWithRuntimeMock()
 	e := testEntity("declarative-id")
@@ -365,7 +369,7 @@ func (s *ServiceTestSuite) TestUpdateEntity_AppliesTheRuntimeRowReadBeforeTheTra
 			s.store.On("LockEntity", mock.Anything, e.ID).Return(*e, nil).Once()
 			s.store.On("UpdateEntity", mock.Anything, e).Return(nil).Once()
 			s.store.On("GetEntity", mock.Anything, e.ID).Return(stored, nil).Once()
-			svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transactioner)
+			svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transactioner, nil)
 
 			updated, err := svc.UpdateEntity(s.ctx, e.ID, e)
 
@@ -490,7 +494,7 @@ func (s *ServiceTestSuite) TestGovernanceWritesGoToTheRuntimeStore() {
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
 	observed := identitygovernance.LockEntry{FailureCount: 5, Revision: 3}
 	episode := identitygovernance.LockEpisode{LockCount: 1, UnlockAt: "2026-09-08T10:05:00Z"}
-	hold := &identitygovernance.EntityHold{UnlockAt: testPermanentUnlockAt}
+	hold := &identitygovernance.AccountHold{UnlockAt: testPermanentUnlockAt}
 	methods := []providers.AuthenticationMethod{providers.AuthenticationMethodCredential}
 	for name, tc := range map[string]struct {
 		expect func(runtime *entityRuntimeStoreInterfaceMock)
@@ -600,7 +604,7 @@ func (s *ServiceTestSuite) TestCreateEntity_WritesTheRuntimeRowAfterTheCommit() 
 	var events []string
 	transactioner, txCtx := s.passingTransactioner(&committed, &events)
 	runtime := newEntityRuntimeStoreInterfaceMock(s.T())
-	svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transactioner)
+	svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transactioner, nil)
 	e := testEntity("create-after")
 	e.State = providers.EntityStateSuspended
 	s.store.On("IsEntityDeclarative", mock.Anything, e.ID).Return(false, ErrEntityNotFound).Once()
@@ -637,7 +641,7 @@ func (s *ServiceTestSuite) TestDeleteEntity_DeletesTheRuntimeRowAfterTheCommit()
 	var events []string
 	transactioner, txCtx := s.passingTransactioner(&committed, &events)
 	runtime := newEntityRuntimeStoreInterfaceMock(s.T())
-	svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transactioner)
+	svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transactioner, nil)
 	s.store.On("DeleteEntity", txCtx, "del-after").Return(nil).Once()
 	runtime.On("DeleteRuntimeData", s.ctx, "del-after").
 		Run(func(mock.Arguments) { events = append(events, "runtime row deleted") }).Return(nil).Once()
@@ -651,7 +655,7 @@ func (s *ServiceTestSuite) TestDeleteEntity_DeletesTheRuntimeRowAfterTheCommit()
 // expectations, for tests that make one runtime call fail.
 func (s *ServiceTestSuite) newServiceWithRuntimeMock() (EntityServiceInterface, *entityRuntimeStoreInterfaceMock) {
 	runtime := newEntityRuntimeStoreInterfaceMock(s.T())
-	svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner())
+	svc := newEntityService(s.store, runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner(), nil)
 	return svc, runtime
 }
 
@@ -703,7 +707,7 @@ func (s *ServiceTestSuite) TestUpdateEntity_Success() {
 
 func (s *ServiceTestSuite) newSvcWithEntityType() (*entityService, *entitytypemock.EntityTypeServiceInterfaceMock) {
 	ets := entitytypemock.NewEntityTypeServiceInterfaceMock(s.T())
-	svc := newEntityService(s.store, s.runtime, s.hashService, ets, nil, transaction.NewNoOpTransactioner())
+	svc := newEntityService(s.store, s.runtime, s.hashService, ets, nil, transaction.NewNoOpTransactioner(), nil)
 	return svc.(*entityService), ets
 }
 
@@ -1032,6 +1036,278 @@ func (s *ServiceTestSuite) TestGetEntityListByOUIDs_Delegates() {
 	s.Len(list, 1)
 }
 
+// testUserSharingType is the sharing resource type the page tests give users.
+const testUserSharingType sharing.ResourceType = "user"
+
+// withUserSharing makes users shareable through a sharing service mock, which the caller sets up.
+func (s *ServiceTestSuite) withUserSharing() *sharingmock.SharingServiceInterfaceMock {
+	sharingService := sharingmock.NewSharingServiceInterfaceMock(s.T())
+	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner(),
+		sharingService)
+	s.svc.RegisterSharedCategory(providers.EntityCategoryUser, testUserSharingType)
+	return sharingService
+}
+
+// shareUsers makes the sharing service answer with sharedIDs for the users shared into ou1.
+func (s *ServiceTestSuite) shareUsers(sharedIDs []string, svcErr *tidcommon.ServiceError) {
+	s.withUserSharing().On("ListVisibleResourceIDs", mock.Anything, testUserSharingType, "ou1").
+		Return(sharedIDs, svcErr).Once()
+}
+
+func (s *ServiceTestSuite) TestGetSharedResourceType() {
+	s.svc.RegisterSharedCategory(providers.EntityCategoryUser, testUserSharingType)
+
+	resourceType, ok := s.svc.GetSharedResourceType(providers.EntityCategoryUser)
+	s.True(ok)
+	s.Equal(testUserSharingType, resourceType)
+
+	_, ok = s.svc.GetSharedResourceType(providers.EntityCategoryAgent)
+	s.False(ok, "a category nothing registered is not shareable")
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_PageSpansOwnedAndShared() {
+	s.shareUsers([]string{"shared-1", "shared-2"}, nil)
+	owned := testEntity("owned-3")
+	shared := testEntity("shared-1")
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", []string{"ou1"}, mock.Anything).
+		Return(3, nil).Once()
+	s.store.On("GetEntityListByOUIDs", mock.Anything, "user", []string{"ou1"}, 1, 2, mock.Anything).
+		Return([]providers.Entity{*owned}, nil).Once()
+	s.store.On("GetEntitiesByIDs", mock.Anything, []string{"shared-1"}).
+		Return([]providers.Entity{*shared}, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeAll, 2, 2, nil)
+
+	s.Require().NoError(err)
+	s.Equal(5, page.TotalResults)
+	s.Require().Len(page.Owned, 1)
+	s.Equal("owned-3", page.Owned[0].ID)
+	s.Require().Len(page.Shared, 1)
+	s.Equal("shared-1", page.Shared[0].ID)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_PastOwned_ReadsOnlyShared() {
+	s.shareUsers([]string{"shared-a", "shared-b", "shared-app", "shared-c"}, nil)
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", []string{"ou1"}, mock.Anything).
+		Return(2, nil).Once()
+	app := testEntity("shared-app")
+	app.Category = providers.EntityCategoryApp
+	s.store.On("GetEntitiesByIDs", mock.Anything, []string{"shared-b", "shared-app", "shared-c"}).
+		Return([]providers.Entity{*testEntity("shared-c"), *app, *testEntity("shared-b")}, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeAll, 3, 3, nil)
+
+	s.Require().NoError(err)
+	s.Equal(6, page.TotalResults)
+	s.Empty(page.Owned)
+	s.Require().Len(page.Shared, 2, "an entity of another category is left out")
+	s.Equal([]string{"shared-b", "shared-c"}, []string{page.Shared[0].ID, page.Shared[1].ID})
+	s.store.AssertNotCalled(s.T(), "GetEntityListByOUIDs", mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_OwnedScope_ListsNoShared() {
+	s.withUserSharing()
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", []string{"ou1"}, mock.Anything).
+		Return(1, nil).Once()
+	s.store.On("GetEntityListByOUIDs", mock.Anything, "user", []string{"ou1"}, 1, 0, mock.Anything).
+		Return([]providers.Entity{*testEntity("owned-1")}, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeOwned, 10, 0, nil)
+
+	s.Require().NoError(err)
+	s.Equal(1, page.TotalResults)
+	s.Len(page.Owned, 1)
+	s.Empty(page.Shared)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_SharedScope_ListsNoOwned() {
+	s.shareUsers([]string{"shared-1"}, nil)
+	s.store.On("GetEntitiesByIDs", mock.Anything, []string{"shared-1"}).
+		Return([]providers.Entity{*testEntity("shared-1")}, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeShared, 10, 0, nil)
+
+	s.Require().NoError(err)
+	s.Equal(1, page.TotalResults)
+	s.Empty(page.Owned)
+	s.Len(page.Shared, 1)
+	s.store.AssertNotCalled(s.T(), "GetEntityListCountByOUIDs", mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything)
+}
+
+// A category with no sharing resource type is never shared, so only its owned entities are listed.
+func (s *ServiceTestSuite) TestGetEntityPageInOU_UnsharedCategory_ListsOwned() {
+	s.withUserSharing()
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "agent", []string{"ou1"}, mock.Anything).
+		Return(0, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryAgent, "ou1", OUEntityScopeAll, 10, 0, nil)
+
+	s.Require().NoError(err)
+	s.Zero(page.TotalResults)
+	s.Empty(page.Owned)
+	s.Empty(page.Shared)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_UnknownOU_ListsNothing() {
+	s.shareUsers(nil, &ou.ErrorOrganizationUnitNotFound)
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", []string{"ou1"}, mock.Anything).
+		Return(0, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeAll, 10, 0, nil)
+
+	s.Require().NoError(err)
+	s.Zero(page.TotalResults)
+	s.Empty(page.Owned)
+	s.Empty(page.Shared)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_SharingFailure() {
+	s.shareUsers(nil, &tidcommon.InternalServerError)
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", []string{"ou1"}, mock.Anything).
+		Return(0, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeAll, 10, 0, nil)
+
+	s.Error(err)
+	s.Nil(page)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_FiltersNarrowOwned() {
+	filters := map[string]interface{}{"username": "alice"}
+	s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", []string{"ou1"}, filters).
+		Return(1, nil).Once()
+	s.store.On("GetEntityListByOUIDs", mock.Anything, "user", []string{"ou1"}, 1, 0, filters).
+		Return([]providers.Entity{*testEntity("owned-1")}, nil).Once()
+
+	page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeOwned, 10, 0,
+		filters)
+
+	s.Require().NoError(err)
+	s.Equal(1, page.TotalResults)
+	s.Len(page.Owned, 1)
+	s.Empty(page.Shared)
+}
+
+// Filters cannot narrow shared entities yet, so a scope that lists them refuses filters rather than
+// listing shared entities a filter would have left out.
+func (s *ServiceTestSuite) TestGetEntityPageInOU_FiltersRefusedWithShared() {
+	s.withUserSharing()
+	filters := map[string]interface{}{"username": "alice"}
+	for _, scope := range []OUEntityScope{OUEntityScopeAll, OUEntityScopeShared} {
+		page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", scope, 10, 0, filters)
+
+		s.ErrorIs(err, errSharedEntityFilterUnsupported)
+		s.Nil(page)
+	}
+	s.store.AssertNotCalled(s.T(), "GetEntityListCountByOUIDs", mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything)
+}
+
+func (s *ServiceTestSuite) TestGetEntityPageInOU_Errors() {
+	for _, tc := range []struct {
+		name    string
+		arrange func()
+	}{
+		{"count", func() {
+			s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", mock.Anything, mock.Anything).
+				Return(0, s.testErr).Once()
+		}},
+		{"owned list", func() {
+			s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", mock.Anything, mock.Anything).
+				Return(1, nil).Once()
+			s.store.On("GetEntityListByOUIDs", mock.Anything, "user", mock.Anything, 1, 0, mock.Anything).
+				Return(nil, s.testErr).Once()
+		}},
+		{"shared load", func() {
+			s.shareUsers([]string{"shared-1"}, nil)
+			s.store.On("GetEntityListCountByOUIDs", mock.Anything, "user", mock.Anything, mock.Anything).
+				Return(0, nil).Once()
+			s.store.On("GetEntitiesByIDs", mock.Anything, []string{"shared-1"}).Return(nil, s.testErr).Once()
+		}},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			tc.arrange()
+
+			page, err := s.svc.GetEntityPageInOU(s.ctx, providers.EntityCategoryUser, "ou1", OUEntityScopeAll,
+				10, 0, nil)
+
+			s.ErrorIs(err, s.testErr)
+			s.Nil(page)
+		})
+	}
+}
+
+func (s *ServiceTestSuite) TestGetEntityListBySystemAttributes_Delegates() {
+	sysQuery := SystemAttributeQuery{SystemAttributes: map[string]interface{}{"owner": "u1"}}
+	e := testEntity("sys-e1")
+	s.store.On("GetEntityListCountBySystemAttributes", mock.Anything, "agent", sysQuery).Return(1, nil)
+	s.store.On("GetEntityListBySystemAttributes", mock.Anything, "agent", sysQuery, 10, 0).
+		Return([]providers.Entity{*e}, nil)
+
+	count, err := s.svc.GetEntityListCountBySystemAttributes(s.ctx, providers.EntityCategoryAgent, sysQuery)
+	s.NoError(err)
+	s.Equal(1, count)
+	list, err := s.svc.GetEntityListBySystemAttributes(s.ctx, providers.EntityCategoryAgent, sysQuery, 10, 0)
+	s.NoError(err)
+	s.Len(list, 1)
+}
+
+func (s *ServiceTestSuite) TestGetEntityListBySystemAttributes_Errors() {
+	sysQuery := SystemAttributeQuery{SystemAttributes: map[string]interface{}{"owner": "u1"}}
+	s.store.On("GetEntityListBySystemAttributes", mock.Anything, "agent", sysQuery, 10, 0).
+		Return(nil, s.testErr).Once()
+	_, err := s.svc.GetEntityListBySystemAttributes(s.ctx, providers.EntityCategoryAgent, sysQuery, 10, 0)
+	s.ErrorIs(err, s.testErr, "store error")
+
+	svc, runtime := s.newServiceWithRuntimeMock()
+	e := testEntity("sys-read-fails")
+	s.store.On("GetEntityListBySystemAttributes", mock.Anything, "agent", sysQuery, 10, 0).
+		Return([]providers.Entity{*e}, nil)
+	runtime.On("GetRuntimeData", mock.Anything, []string{e.ID}).Return(nil, s.testErr)
+	_, err = svc.GetEntityListBySystemAttributes(s.ctx, providers.EntityCategoryAgent, sysQuery, 10, 0)
+	s.ErrorIs(err, s.testErr, "runtime read error")
+}
+
+func (s *ServiceTestSuite) TestGetEntityListBySystemAttributesAndOUIDs_Delegates() {
+	sysQuery := SystemAttributeQuery{SystemAttributes: map[string]interface{}{"owner": "u1"}}
+	ouIDs := []string{"ou1"}
+	e := testEntity("sys-ou-e1")
+	s.store.On("GetEntityListCountBySystemAttributesAndOUIDs", mock.Anything, "agent", sysQuery, ouIDs).
+		Return(1, nil)
+	s.store.On("GetEntityListBySystemAttributesAndOUIDs", mock.Anything, "agent", sysQuery, ouIDs, 10, 0).
+		Return([]providers.Entity{*e}, nil)
+
+	count, err := s.svc.GetEntityListCountBySystemAttributesAndOUIDs(
+		s.ctx, providers.EntityCategoryAgent, sysQuery, ouIDs)
+	s.NoError(err)
+	s.Equal(1, count)
+	list, err := s.svc.GetEntityListBySystemAttributesAndOUIDs(
+		s.ctx, providers.EntityCategoryAgent, sysQuery, ouIDs, 10, 0)
+	s.NoError(err)
+	s.Len(list, 1)
+}
+
+func (s *ServiceTestSuite) TestGetEntityListBySystemAttributesAndOUIDs_Errors() {
+	sysQuery := SystemAttributeQuery{SystemAttributes: map[string]interface{}{"owner": "u1"}}
+	ouIDs := []string{"ou1"}
+	s.store.On("GetEntityListBySystemAttributesAndOUIDs", mock.Anything, "agent", sysQuery, ouIDs, 10, 0).
+		Return(nil, s.testErr).Once()
+	_, err := s.svc.GetEntityListBySystemAttributesAndOUIDs(
+		s.ctx, providers.EntityCategoryAgent, sysQuery, ouIDs, 10, 0)
+	s.ErrorIs(err, s.testErr, "store error")
+
+	svc, runtime := s.newServiceWithRuntimeMock()
+	e := testEntity("sys-ou-read-fails")
+	s.store.On("GetEntityListBySystemAttributesAndOUIDs", mock.Anything, "agent", sysQuery, ouIDs, 10, 0).
+		Return([]providers.Entity{*e}, nil)
+	runtime.On("GetRuntimeData", mock.Anything, []string{e.ID}).Return(nil, s.testErr)
+	_, err = svc.GetEntityListBySystemAttributesAndOUIDs(s.ctx, providers.EntityCategoryAgent, sysQuery, ouIDs, 10, 0)
+	s.ErrorIs(err, s.testErr, "runtime read error")
+}
+
 func (s *ServiceTestSuite) TestValidateEntityIDs_Delegates() {
 	s.store.On("ValidateEntityIDs", mock.Anything, []string{"id1", "id2"}).Return([]string{}, nil)
 	invalid, err := s.svc.ValidateEntityIDs(s.ctx, []string{"id1", "id2"})
@@ -1144,6 +1420,15 @@ func testCredentialsJSON() json.RawMessage {
 		`"storageAlgoParams":{"salt":"testsalt","iterations":1,"keySize":32}}]}`)
 }
 
+// twoCandidateCredentialsJSON stores two password candidates, as an entity mid-rehash holds.
+func twoCandidateCredentialsJSON() json.RawMessage {
+	return json.RawMessage(`{"password":[` +
+		`{"value":"brokenhash","storageAlgo":"LEGACY",` +
+		`"storageAlgoParams":{"salt":"s","iterations":1,"keySize":32}},` +
+		`{"value":"testhash","storageAlgo":"PBKDF2",` +
+		`"storageAlgoParams":{"salt":"testsalt","iterations":1,"keySize":32}}]}`)
+}
+
 func (s *ServiceTestSuite) TestAuthenticateEntityByID_Success() {
 	storedCreds := testCredentialsJSON()
 	e := testEntity("auth-id-1")
@@ -1151,8 +1436,10 @@ func (s *ServiceTestSuite) TestAuthenticateEntityByID_Success() {
 		Return(&entityWithCredentials{Entity: e, SchemaCredentials: storedCreds}, nil)
 	s.hashService.On("Verify", []byte("password123"), mock.Anything).Return(true, nil)
 
-	result, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID, map[string]interface{}{"password": "password123"})
+	result, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "password123"})
 	s.NoError(err)
+	s.Empty(mismatchedEntityID, "a successful verification produces no failure evidence")
 	s.Equal(e.ID, result.EntityID)
 	s.Equal(e.Category, result.EntityCategory)
 	s.Equal(e.Type, result.EntityType)
@@ -1160,12 +1447,12 @@ func (s *ServiceTestSuite) TestAuthenticateEntityByID_Success() {
 }
 
 func (s *ServiceTestSuite) TestAuthenticateEntityByID_EmptyID() {
-	_, err := s.svc.AuthenticateEntityByID(s.ctx, "", map[string]interface{}{"password": "p"})
+	_, _, err := s.svc.AuthenticateEntityByID(s.ctx, "", map[string]interface{}{"password": "p"})
 	s.ErrorIs(err, ErrEntityNotFound)
 }
 
 func (s *ServiceTestSuite) TestAuthenticateEntityByID_EmptyCredentials() {
-	_, err := s.svc.AuthenticateEntityByID(s.ctx, "some-id", map[string]interface{}{})
+	_, _, err := s.svc.AuthenticateEntityByID(s.ctx, "some-id", map[string]interface{}{})
 	s.ErrorIs(err, ErrAuthenticationFailed)
 }
 
@@ -1173,7 +1460,7 @@ func (s *ServiceTestSuite) TestAuthenticateEntityByID_EntityNotFound() {
 	s.store.On("GetEntityWithCredentials", mock.Anything, "missing").
 		Return(nil, ErrEntityNotFound)
 
-	_, err := s.svc.AuthenticateEntityByID(s.ctx, "missing", map[string]interface{}{"password": "p"})
+	_, _, err := s.svc.AuthenticateEntityByID(s.ctx, "missing", map[string]interface{}{"password": "p"})
 	s.ErrorIs(err, ErrEntityNotFound)
 }
 
@@ -1184,7 +1471,7 @@ func (s *ServiceTestSuite) TestAuthenticateEntityByID_DoesNotCheckProfileState()
 		Return(&entityWithCredentials{Entity: e, SchemaCredentials: testCredentialsJSON()}, nil)
 
 	s.hashService.On("Verify", []byte("p"), mock.Anything).Return(true, nil)
-	result, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID, map[string]interface{}{"password": "p"})
+	result, _, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID, map[string]interface{}{"password": "p"})
 	s.NoError(err)
 	s.Require().NotNil(result)
 	s.Equal(e.ID, result.EntityID)
@@ -1197,8 +1484,10 @@ func (s *ServiceTestSuite) TestAuthenticateEntityByID_WrongCredentials() {
 		Return(&entityWithCredentials{Entity: e, SchemaCredentials: storedCreds}, nil)
 	s.hashService.On("Verify", []byte("wrong"), mock.Anything).Return(false, nil)
 
-	_, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID, map[string]interface{}{"password": "wrong"})
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "wrong"})
 	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Equal(e.ID, mismatchedEntityID, "a compared and rejected secret is attributable")
 }
 
 func (s *ServiceTestSuite) TestAuthenticateEntityByID_VerifyError() {
@@ -1208,7 +1497,7 @@ func (s *ServiceTestSuite) TestAuthenticateEntityByID_VerifyError() {
 		Return(&entityWithCredentials{Entity: e, SchemaCredentials: storedCreds}, nil)
 	s.hashService.On("Verify", []byte("password123"), mock.Anything).Return(false, s.testErr)
 
-	_, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID, map[string]interface{}{"password": "password123"})
+	_, _, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID, map[string]interface{}{"password": "password123"})
 	s.ErrorIs(err, ErrAuthenticationFailed)
 }
 
@@ -1223,9 +1512,23 @@ func (s *ServiceTestSuite) TestAuthenticateEntity_DelegatesToByID() {
 		Return(&entityWithCredentials{Entity: e, SchemaCredentials: storedCreds}, nil)
 	s.hashService.On("Verify", []byte("pass"), mock.Anything).Return(true, nil)
 
-	result, err := s.svc.AuthenticateEntity(s.ctx, filters, map[string]interface{}{"password": "pass"})
+	result, _, err := s.svc.AuthenticateEntity(s.ctx, filters, map[string]interface{}{"password": "pass"})
 	s.NoError(err)
 	s.Equal(id, result.EntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntity_EmptyIdentifiers() {
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntity(s.ctx, map[string]interface{}{},
+		map[string]interface{}{"password": "p"})
+	s.ErrorIs(err, ErrEntityNotFound)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntity_EmptyCredentials() {
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntity(s.ctx, map[string]interface{}{"username": "user1"},
+		map[string]interface{}{})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Empty(mismatchedEntityID)
 }
 
 // --- SetGroupMembershipProvider / GetTransitiveEntityGroups ---
@@ -1350,7 +1653,7 @@ func (s *ServiceTestSuite) TestUpdateSystemAttributes_UnparsableStoredBlobFails(
 }
 
 // Links are written only by LinkAccount, which enforces the link limit, so a caller that
-// sends linkedIds through a wholesale replace has them dropped when the entity holds none.
+// sends linkedIds through a wholesale replace has them dropped when the account holds none.
 func (s *ServiceTestSuite) TestUpdateSystemAttributes_DropsCallerSentLinks() {
 	e := testEntity("e-sent-links")
 	s.store.On("LockEntity", mock.Anything, e.ID).Return(*e, nil)
@@ -1645,7 +1948,8 @@ func (s *ServiceTestSuite) TestResolveLinkedAccounts_RejectsEmptyArguments() {
 // Every holder of the subject is returned with its OU handle, for the user to pick between them.
 func (s *ServiceTestSuite) TestGetLinkedEntities_ReturnsHoldersWithOUHandles() {
 	ouService := oumock.NewOrganizationUnitServiceInterfaceMock(s.T())
-	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, ouService, transaction.NewNoOpTransactioner())
+	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, ouService,
+		transaction.NewNoOpTransactioner(), nil)
 	first, second := testEntity("e-holder-1"), testEntity("e-holder-2")
 	second.OUID = "ou-2"
 	s.store.On("ResolveLinkedAccounts", mock.Anything, "idp-a", "sub-1").
@@ -1691,6 +1995,212 @@ func (s *ServiceTestSuite) TestUpdateSystemAttributes_NoMarkerPassesThrough() {
 
 	s.NoError(s.svc.UpdateSystemAttributes(s.ctx, e.ID, json.RawMessage(`{"name":"New"}`)))
 	s.JSONEq(`{"name":"New"}`, string(written))
+}
+
+// --- Failure evidence ---
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_WrongCredentialProducesEvidence() {
+	e := testEntity("count-1")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: testCredentialsJSON()}, nil)
+	s.hashService.On("Verify", []byte("wrong"), mock.Anything).Return(false, nil)
+
+	result, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "wrong"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Nil(result, "a refusal returns no authenticate result")
+	s.Equal(e.ID, mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntity_EvidenceNamesTheComparedEntity() {
+	id := "count-2"
+	e := testEntity(id)
+	filters := map[string]interface{}{"username": "someone"}
+	s.store.On("IdentifyEntity", mock.Anything, filters).Return(&id, nil)
+	s.store.On("GetEntityWithCredentials", mock.Anything, id).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: testCredentialsJSON()}, nil)
+	s.hashService.On("Verify", mock.Anything, mock.Anything).Return(false, nil)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntity(s.ctx, filters,
+		map[string]interface{}{"password": "wrong"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Equal(id, mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntity_UnknownIdentifierProducesNoEvidence() {
+	filters := map[string]interface{}{"username": "ghost"}
+	s.store.On("IdentifyEntity", mock.Anything, filters).Return(nil, ErrEntityNotFound)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntity(s.ctx, filters,
+		map[string]interface{}{"password": "wrong"})
+	s.ErrorIs(err, ErrEntityNotFound)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_NoStoredCredentialOfThatTypeProducesNoEvidence() {
+	e := testEntity("count-3")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: testCredentialsJSON()}, nil)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"pin": "1234"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_NoStoredCredentialsProducesNoEvidence() {
+	e := testEntity("count-4")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e}, nil)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "wrong"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_CorruptCredentialBlobProducesNoEvidence() {
+	corrupt := json.RawMessage(`not json`)
+	cases := []struct {
+		name   string
+		stored *entityWithCredentials
+	}{
+		{name: "schema credentials", stored: &entityWithCredentials{SchemaCredentials: corrupt}},
+		{name: "system credentials", stored: &entityWithCredentials{SystemCredentials: corrupt}},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			e := testEntity("count-5")
+			tc.stored.Entity = e
+			s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).Return(tc.stored, nil)
+
+			_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+				map[string]interface{}{"password": "wrong"})
+			s.Require().Error(err)
+			s.NotErrorIs(err, ErrAuthenticationFailed)
+			s.Empty(mismatchedEntityID)
+		})
+	}
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_IndeterminateHashServiceProducesNoEvidence() {
+	e := testEntity("count-6")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: testCredentialsJSON()}, nil)
+	s.hashService.On("Verify", mock.Anything, mock.Anything).
+		Return(false, errors.New("hash service unavailable"))
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "wrong"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_MatchingCandidateWinsOverAnIndeterminateOne() {
+	e := testEntity("count-7")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: twoCandidateCredentialsJSON()}, nil)
+	s.hashService.On("Verify", mock.Anything, mock.MatchedBy(func(c cryptolib.Credential) bool {
+		return c.Hash == "brokenhash"
+	})).Return(false, errors.New("unsupported algorithm"))
+	s.hashService.On("Verify", mock.Anything, mock.MatchedBy(func(c cryptolib.Credential) bool {
+		return c.Hash == "testhash"
+	})).Return(true, nil)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "right"})
+	s.Require().NoError(err)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_NoMatchWithAnIndeterminateCandidateProducesNoEvidence() {
+	e := testEntity("count-8")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: twoCandidateCredentialsJSON()}, nil)
+	s.hashService.On("Verify", mock.Anything, mock.MatchedBy(func(c cryptolib.Credential) bool {
+		return c.Hash == "brokenhash"
+	})).Return(false, errors.New("unsupported algorithm"))
+	s.hashService.On("Verify", mock.Anything, mock.MatchedBy(func(c cryptolib.Credential) bool {
+		return c.Hash == "testhash"
+	})).Return(false, nil)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{"password": "wrong"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Empty(mismatchedEntityID)
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_ProvenMismatchDecidesOverAnIndeterminateSibling() {
+	s.hashService.On("Verify", []byte("wrong"), mock.Anything).Return(false, nil)
+	cases := []struct {
+		name string
+		id   string
+		// sibling is the indeterminate credential type; credentials are compared in sorted type order.
+		sibling string
+		reached bool
+	}{
+		{name: "sibling compared after the mismatch", id: "count-10", sibling: "pin", reached: false},
+		{name: "sibling compared before the mismatch", id: "count-11", sibling: "passcode", reached: true},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			e := testEntity(tc.id)
+			s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+				Return(&entityWithCredentials{
+					Entity: e,
+					SchemaCredentials: json.RawMessage(`{` +
+						`"password":[{"value":"testhash","storageAlgo":"PBKDF2",` +
+						`"storageAlgoParams":{"salt":"testsalt","iterations":1,"keySize":32}}],` +
+						`"` + tc.sibling + `":[{"value":"brokenhash","storageAlgo":"LEGACY",` +
+						`"storageAlgoParams":{"salt":"s","iterations":1,"keySize":32}}]}`),
+				}, nil).Once()
+			if tc.reached {
+				s.hashService.On("Verify", []byte("0000"), mock.Anything).
+					Return(false, errors.New("unsupported algorithm")).Once()
+			}
+
+			_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+				map[string]interface{}{"password": "wrong", tc.sibling: "0000"})
+
+			s.ErrorIs(err, ErrAuthenticationFailed)
+			s.Equal(e.ID, mismatchedEntityID)
+		})
+	}
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_CorrectSecretBesideAnIndeterminateOneProducesNoEvidence() {
+	e := testEntity("count-12")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{
+			Entity: e,
+			SchemaCredentials: json.RawMessage(`{` +
+				`"password":[{"value":"testhash","storageAlgo":"PBKDF2",` +
+				`"storageAlgoParams":{"salt":"testsalt","iterations":1,"keySize":32}}],` +
+				`"pin":[{"value":"brokenhash","storageAlgo":"LEGACY",` +
+				`"storageAlgoParams":{"salt":"s","iterations":1,"keySize":32}}]}`),
+		}, nil)
+	s.hashService.On("Verify", []byte("right"), mock.Anything).Return(true, nil)
+	s.hashService.On("Verify", []byte("0000"), mock.Anything).
+		Return(false, errors.New("unsupported algorithm"))
+
+	for range 8 {
+		_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+			map[string]interface{}{"password": "right", "pin": "0000"})
+		s.ErrorIs(err, ErrAuthenticationFailed)
+		s.Empty(mismatchedEntityID)
+	}
+}
+
+func (s *ServiceTestSuite) TestAuthenticateEntityByID_StepThatVerifiesNoSecretProducesNoEvidence() {
+	e := testEntity("count-9")
+	s.store.On("GetEntityWithCredentials", mock.Anything, e.ID).
+		Return(&entityWithCredentials{Entity: e, SchemaCredentials: testCredentialsJSON()}, nil)
+
+	_, mismatchedEntityID, err := s.svc.AuthenticateEntityByID(s.ctx, e.ID,
+		map[string]interface{}{authnprovidercm.CredentialTypeProvisionedEntityID: "count-9"})
+	s.ErrorIs(err, ErrAuthenticationFailed)
+	s.Empty(mismatchedEntityID)
 }
 
 // suspendedEntity returns a suspended entity.
@@ -1761,7 +2271,7 @@ func (s *ServiceTestSuite) governedRead(e *providers.Entity, state providers.Ent
 	s.runtime = newEntityRuntimeStoreInterfaceMock(s.T())
 	s.runtime.On("GetRuntimeData", mock.Anything, []string{e.ID}).
 		Return(map[string]entityRuntimeData{e.ID: row}, nil).Once()
-	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner())
+	s.svc = newEntityService(s.store, s.runtime, s.hashService, nil, nil, transaction.NewNoOpTransactioner(), nil)
 }
 
 // The governed read carries the category, the parsed lock state and the runtime row's revision.
@@ -1788,11 +2298,11 @@ func (s *ServiceTestSuite) TestGetGovernedEntityReadsTheRuntimeRow() {
 	s.Equal("2026-09-08T10:00:00Z", credential.LastFailedAt)
 }
 
-func (s *ServiceTestSuite) TestGetGovernedEntityParsesSuspensionAndEntityHold() {
+func (s *ServiceTestSuite) TestGetGovernedEntityParsesSuspensionAndAccountHold() {
 	e := testEntity("e-gov-held")
 	s.governedRead(e, providers.EntityStateSuspended, `{"accessState":{"suspend":`+
 		`{"suspendedAt":"2026-09-10T11:02:00Z","operatorNote":"Credential exposure"},`+
-		`"lock":{"entity":{"unlockAt":"9999-12-31T23:59:59Z","reason":"POST_SUSPENDED"}},`+
+		`"lock":{"account":{"unlockAt":"9999-12-31T23:59:59Z","reason":"POST_SUSPENDED"}},`+
 		`"lastLoginAt":"2026-09-09T18:22:04Z"}}`)
 
 	governed, err := s.svc.GetGovernedEntity(s.ctx, e.ID, true)
@@ -1802,10 +2312,10 @@ func (s *ServiceTestSuite) TestGetGovernedEntityParsesSuspensionAndEntityHold() 
 	s.Equal("2026-09-10T11:02:00Z", governed.AccessState.Suspend.SuspendedAt)
 	s.Equal("Credential exposure", governed.AccessState.Suspend.OperatorNote)
 	s.Equal("2026-09-09T18:22:04Z", governed.AccessState.LastLoginAt)
-	s.Require().NotNil(governed.AccessState.Lock.Entity)
+	s.Require().NotNil(governed.AccessState.Lock.Account)
 	s.Equal(int64(7), governed.Revision)
-	s.Equal(testPermanentUnlockAt, governed.AccessState.Lock.Entity.UnlockAt)
-	s.Equal(testPostSuspensionReason, governed.AccessState.Lock.Entity.Reason)
+	s.Equal(testPermanentUnlockAt, governed.AccessState.Lock.Account.UnlockAt)
+	s.Equal(testPostSuspensionReason, governed.AccessState.Lock.Account.Reason)
 	s.Empty(governed.AccessState.Lock.AuthenticationMethods)
 }
 
@@ -1901,7 +2411,7 @@ func (s *ServiceTestSuite) newServiceWithIndexedEmail() (*entityService, *entity
 	runtime := newEntityRuntimeStoreInterfaceMock(s.T())
 	installRuntimeFixture(runtime)
 	svc := newEntityService(store, runtime, s.hashService, ets, nil,
-		transaction.NewNoOpTransactioner()).(*entityService)
+		transaction.NewNoOpTransactioner(), nil).(*entityService)
 	return svc, store
 }
 
@@ -1940,134 +2450,4 @@ func (s *ServiceTestSuite) TestUpdateSystemAttributes_ValuesAtLimitAccepted() {
 	store.On("UpdateSystemAttributes", mock.Anything, "e1", mock.IsType(json.RawMessage(nil))).Return(nil)
 
 	s.NoError(svc.UpdateSystemAttributes(s.ctx, "e1", attrs))
-}
-
-// legacyEntity is a user federated before links were recorded: its subject sits only in sub.
-func legacyEntity(id, sub string) providers.Entity {
-	attrs, _ := json.Marshal(map[string]interface{}{"username": "user-" + id, "sub": sub})
-	e := testEntity(id)
-	e.Attributes = attrs
-	return *e
-}
-
-func (s *ServiceTestSuite) expectLegacyLookup(e providers.Entity) {
-	s.store.On("SearchEntities", mock.Anything, map[string]interface{}{"sub": "sub-1"}).
-		Return([]providers.Entity{e}, nil).Once()
-	s.expectLegacyLock(e)
-}
-
-func (s *ServiceTestSuite) expectLegacyLock(e providers.Entity) {
-	s.store.On("LockEntity", mock.Anything, e.ID).Return(e, nil).Once()
-}
-
-func (s *ServiceTestSuite) TestClaimLegacySubject_LinksAndDropsSub() {
-	e := legacyEntity("e-legacy", "sub-1")
-	s.expectLegacyLookup(e)
-
-	var sysWritten, attrsWritten json.RawMessage
-	s.store.On("UpdateSystemAttributes", mock.Anything, e.ID, mock.Anything).
-		Run(func(args mock.Arguments) { sysWritten, _ = args.Get(2).(json.RawMessage) }).Return(nil).Once()
-	s.store.On("UpdateAttributes", mock.Anything, e.ID, mock.Anything).
-		Run(func(args mock.Arguments) { attrsWritten, _ = args.Get(2).(json.RawMessage) }).Return(nil).Once()
-
-	got, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.Require().NoError(err)
-	s.Equal([]string{e.ID}, got)
-	s.JSONEq(`{"linkedIds":{"idp-a":{"sub-1":{}}}}`, string(sysWritten))
-	s.JSONEq(`{"username":"user-e-legacy"}`, string(attrsWritten))
-}
-
-// One subject may be held by users in several OUs, and before links a sign-in matched sub whatever
-// else the user held. Every holder is claimed, credentials and other links included, and the flow
-// lets the person pick between them.
-func (s *ServiceTestSuite) TestClaimLegacySubject_ClaimsEveryHolder() {
-	plain := legacyEntity("e-plain", "sub-1")
-	withPassword := legacyEntity("e-password", "sub-1")
-	withLink := legacyEntity("e-linked", "sub-1")
-	withLink.SystemAttributes = json.RawMessage(`{"linkedIds":{"idp-b":{"other":{}}}}`)
-	s.store.On("SearchEntities", mock.Anything, map[string]interface{}{"sub": "sub-1"}).
-		Return([]providers.Entity{plain, withPassword, withLink}, nil).Once()
-	s.expectLegacyLock(plain)
-	s.expectLegacyLock(withPassword)
-	s.expectLegacyLock(withLink)
-
-	var linkedSys json.RawMessage
-	s.store.On("UpdateSystemAttributes", mock.Anything, withLink.ID, mock.Anything).
-		Run(func(args mock.Arguments) { linkedSys, _ = args.Get(2).(json.RawMessage) }).Return(nil).Once()
-	s.store.On("UpdateSystemAttributes", mock.Anything, mock.Anything, mock.Anything).Return(nil).Twice()
-	s.store.On("UpdateAttributes", mock.Anything, mock.Anything, mock.Anything).Return(nil).Times(3)
-
-	got, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.Require().NoError(err)
-	s.Equal([]string{plain.ID, withPassword.ID, withLink.ID}, got)
-	s.JSONEq(`{"linkedIds":{"idp-a":{"sub-1":{}},"idp-b":{"other":{}}}}`, string(linkedSys),
-		"the new link should sit beside the existing one")
-	s.store.AssertNotCalled(s.T(), "GetEntityWithCredentials", mock.Anything, mock.Anything)
-}
-
-func (s *ServiceTestSuite) TestClaimLegacySubject_NoHolderClaimsNothing() {
-	s.store.On("SearchEntities", mock.Anything, mock.Anything).Return(nil, ErrEntityNotFound).Once()
-
-	got, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.Require().NoError(err)
-	s.Empty(got)
-	s.store.AssertNotCalled(s.T(), "LockEntity", mock.Anything, mock.Anything)
-}
-
-func (s *ServiceTestSuite) TestClaimLegacySubject_LookupErrorPassesThrough() {
-	lookupErr := errors.New("db down")
-	s.store.On("SearchEntities", mock.Anything, mock.Anything).Return(nil, lookupErr).Once()
-
-	_, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.ErrorIs(err, lookupErr)
-	s.store.AssertNotCalled(s.T(), "LockEntity", mock.Anything, mock.Anything)
-}
-
-// A holder already on this link, recorded by a concurrent claim, keeps its system attributes and
-// still drops sub.
-func (s *ServiceTestSuite) TestClaimLegacySubject_AlreadyLinkedDropsSubOnly() {
-	e := legacyEntity("e-linked", "sub-1")
-	e.SystemAttributes = json.RawMessage(`{"linkedIds":{"idp-a":{"sub-1":{}}}}`)
-	s.expectLegacyLookup(e)
-	s.store.On("UpdateAttributes", mock.Anything, e.ID, mock.Anything).Return(nil).Once()
-
-	got, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.Require().NoError(err)
-	s.Equal([]string{e.ID}, got)
-	s.store.AssertNotCalled(s.T(), "UpdateSystemAttributes", mock.Anything, mock.Anything, mock.Anything)
-}
-
-// The lookup ran outside the lock, so a sub a concurrent claim or edit changed is not claimed.
-func (s *ServiceTestSuite) TestClaimLegacySubject_SubChangedUnderLock() {
-	e := legacyEntity("e-raced", "sub-other")
-	s.expectLegacyLookup(e)
-
-	got, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.Require().NoError(err)
-	s.Empty(got)
-	s.store.AssertNotCalled(s.T(), "UpdateSystemAttributes", mock.Anything, mock.Anything, mock.Anything)
-}
-
-// A declarative holder, or one deleted after the search, is not found under the lock. It is skipped
-// rather than failing the claim for every other holder.
-func (s *ServiceTestSuite) TestClaimLegacySubject_SkipsHolderNotFoundUnderLock() {
-	declarative := legacyEntity("e-declarative", "sub-1")
-	legacy := legacyEntity("e-legacy", "sub-1")
-	s.store.On("SearchEntities", mock.Anything, map[string]interface{}{"sub": "sub-1"}).
-		Return([]providers.Entity{declarative, legacy}, nil).Once()
-	s.store.On("LockEntity", mock.Anything, declarative.ID).Return(providers.Entity{}, ErrEntityNotFound).Once()
-	s.expectLegacyLock(legacy)
-	s.store.On("UpdateSystemAttributes", mock.Anything, legacy.ID, mock.Anything).Return(nil).Once()
-	s.store.On("UpdateAttributes", mock.Anything, legacy.ID, mock.Anything).Return(nil).Once()
-
-	got, err := s.svc.ClaimLegacySubject(s.ctx, "idp-a", "sub-1")
-	s.Require().NoError(err)
-	s.Equal([]string{legacy.ID}, got)
-}
-
-func (s *ServiceTestSuite) TestClaimLegacySubject_RequiresConnectionAndSubject() {
-	_, err := s.svc.ClaimLegacySubject(s.ctx, "", "sub-1")
-	s.ErrorIs(err, ErrBadAttributesInRequest)
-	_, err = s.svc.ClaimLegacySubject(s.ctx, "idp-a", "")
-	s.ErrorIs(err, ErrBadAttributesInRequest)
 }

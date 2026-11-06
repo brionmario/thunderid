@@ -5,10 +5,12 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
@@ -142,6 +144,59 @@ jwt:
 	assert.Equal(suite.T(), "user-issuer", config.JWT.Issuer)             // User override
 	assert.Equal(suite.T(), int64(7200), config.JWT.ValidityPeriod)       // Default value
 	assert.Equal(suite.T(), dummyCryptoKey, config.Crypto.Encryption.Key) // Default value
+}
+
+// The server mode is chosen by the entry point, so a deployment file cannot set it: the YAML loader
+// refuses a key Config does not have.
+func (suite *ConfigTestSuite) TestLoadConfigRejectsAServerModeInTheDeploymentFile() {
+	tempDir := suite.T().TempDir()
+	valid := `
+server:
+  hostname: "user-host"
+  port: 8090
+database:
+  config:
+    type: "sqlite"
+    sqlite:
+      path: "database/configdb.db"
+notification:
+  otp:
+    length: 6
+    use_numeric_only: true
+    validity_period_seconds: 120
+`
+
+	_, err := LoadConfig(suite.createTempFile(tempDir, "valid*.yaml", valid), "", tempDir)
+	suite.Require().NoError(err, "the file without a mode must load, so the next failure is about the mode")
+
+	_, err = LoadConfig(suite.createTempFile(tempDir, "mode*.yaml", valid+"mode: \"control_plane\"\n"), "", tempDir)
+	suite.Require().Error(err)
+	suite.Contains(err.Error(), "mode")
+}
+
+// A mode in default.json is ignored, and the server still runs as a data plane.
+func (suite *ConfigTestSuite) TestLoadConfigIgnoresAServerModeInDefaultJSON() {
+	tempDir := suite.T().TempDir()
+	defaults := `{
+  "server": {"hostname": "default-host", "port": 8080},
+  "mode": "control_plane",
+  "server_mode": "control_plane",
+  "notification": {"otp": {"length": 6, "use_numeric_only": true, "validity_period_seconds": 120}}
+}`
+	user := `
+server:
+  hostname: "user-host"
+  port: 8090
+`
+	cfg, err := LoadConfig(suite.createTempFile(tempDir, "user*.yaml", user),
+		suite.createTempFile(tempDir, "default*.json", defaults), tempDir)
+	suite.Require().NoError(err)
+
+	ResetServerRuntime()
+	suite.T().Cleanup(ResetServerRuntime)
+	suite.Require().NoError(InitializeServerRuntime(tempDir, cfg))
+
+	suite.Equal(ServerModeDataPlane, GetServerMode())
 }
 
 func (suite *ConfigTestSuite) TestLoadConfigWithDefaults_NoDefaults() {
@@ -888,6 +943,24 @@ func (suite *ConfigTestSuite) TestMergeStructs_PrimitiveTypes() {
 	assert.Equal(suite.T(), 100, base.IntField)              // Not overridden (zero value)
 	assert.Equal(suite.T(), true, base.BoolField)            // Not overridden (zero value)
 	assert.Equal(suite.T(), 2.71, base.Float64Field)         // Overridden
+}
+
+// An ID-JAG role switched off in deployment.yaml overrides the true default from default.json, and a
+// role the deployment leaves out keeps it.
+func (suite *ConfigTestSuite) TestMergeConfigs_IDJAGRoleOverride() {
+	base := &Config{OAuth: OAuthConfig{IDJAG: engineconfig.IDJAGConfig{
+		Issuance:   engineconfig.IDJAGRoleConfig{Enabled: new(true)},
+		Acceptance: engineconfig.IDJAGRoleConfig{Enabled: new(true)},
+	}}}
+	user := &Config{OAuth: OAuthConfig{IDJAG: engineconfig.IDJAGConfig{
+		Acceptance: engineconfig.IDJAGRoleConfig{Enabled: new(false)},
+	}}}
+
+	mergeConfigs(base, user)
+
+	assert.True(suite.T(), base.OAuth.IDJAG.Issuance.IsEnabled())
+	assert.Equal(suite.T(), new(true), base.OAuth.IDJAG.Issuance.Enabled)
+	assert.False(suite.T(), base.OAuth.IDJAG.Acceptance.IsEnabled())
 }
 
 // TestMergeConfigs_BoolPointerOverride guards the fix for the bug where plain bool config fields
@@ -1736,6 +1809,10 @@ func (suite *ConfigTestSuite) TestNotificationConfig_Validate_DelegatesToOTP() {
 
 func (suite *ConfigTestSuite) TestOAuthConfig_ToEngineConfig_CopiesYAMLFields() {
 	sendErrs := true
+	idJAG := engineconfig.IDJAGConfig{
+		Issuance:   engineconfig.IDJAGRoleConfig{Enabled: new(true)},
+		Acceptance: engineconfig.IDJAGRoleConfig{Enabled: new(false)},
+	}
 	src := OAuthConfig{
 		RefreshToken:             engineconfig.RefreshTokenConfig{RenewOnGrant: true, ValidityPeriod: 7200},
 		AuthorizationCode:        engineconfig.AuthorizationCodeConfig{ValidityPeriod: 300},
@@ -1745,6 +1822,7 @@ func (suite *ConfigTestSuite) TestOAuthConfig_ToEngineConfig_CopiesYAMLFields() 
 		DPoP:                     engineconfig.DPoPConfig{Required: true, AllowedAlgs: []string{"ES256"}},
 		CIBA:                     engineconfig.CIBAConfig{IDTokenHintMaxAgeDays: 30},
 		TokenExchange:            engineconfig.TokenExchangeConfig{TokenFamily: "inherit"},
+		IDJAG:                    idJAG,
 		AllowWildcardRedirectURI: true,
 		AllowedGrantTypes:        []string{"authorization_code"},
 		AllowedResponseTypes:     []string{"code"},
@@ -1762,6 +1840,7 @@ func (suite *ConfigTestSuite) TestOAuthConfig_ToEngineConfig_CopiesYAMLFields() 
 	assert.Equal(suite.T(), src.DPoP, dst.DPoP)
 	assert.Equal(suite.T(), src.CIBA, dst.CIBA)
 	assert.Equal(suite.T(), src.TokenExchange, dst.TokenExchange)
+	assert.Equal(suite.T(), src.IDJAG, dst.IDJAG)
 	assert.Equal(suite.T(), src.AllowWildcardRedirectURI, dst.AllowWildcardRedirectURI)
 	assert.Equal(suite.T(), src.AllowedGrantTypes, dst.AllowedGrantTypes)
 	assert.Equal(suite.T(), src.AllowedResponseTypes, dst.AllowedResponseTypes)
@@ -1914,4 +1993,22 @@ func (suite *ConfigTestSuite) TestDeploymentOverridesAccountAccessDefaults() {
 
 	suite.Equal(3, *base.AccountAccess.User.Default.Threshold)
 	suite.Equal("authentication_method", base.AccountAccess.User.LockGranularity)
+}
+
+// The apply and import timeouts are read in seconds, and an unset one leaves the server's write
+// timeout in place.
+func TestApplyAndImportTimeoutsAreSeconds(t *testing.T) {
+	if got := (GatewayConfig{ApplyTimeoutSeconds: 300}).ApplyTimeout(); got != 300*time.Second {
+		t.Errorf("apply timeout: got %v", got)
+	}
+	if got := (ImportConfig{TimeoutSeconds: 120}).Timeout(); got != 120*time.Second {
+		t.Errorf("import timeout: got %v", got)
+	}
+	if (GatewayConfig{}).ApplyTimeout() != 0 || (ImportConfig{}).Timeout() != 0 {
+		t.Error("an unset timeout should be zero, leaving the server's write timeout in place")
+	}
+	if (GatewayConfig{ApplyTimeoutSeconds: math.MaxInt}).ApplyTimeout() != 0 ||
+		(ImportConfig{TimeoutSeconds: 9223372037}).Timeout() != 0 {
+		t.Error("a timeout too large for a duration should be zero rather than wrap around")
+	}
 }

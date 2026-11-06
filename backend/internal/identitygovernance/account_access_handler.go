@@ -17,6 +17,12 @@ type accountAccessHandler struct {
 	base accountAccessValue
 }
 
+// NewAccountAccessHandler builds the accountAccess server-config handler over the deployment
+// configuration.
+func NewAccountAccessHandler(cfg Config) serverconfig.ServerConfigHandlerInterface {
+	return accountAccessHandler{base: cfg.AccountAccess}
+}
+
 // Decode parses a raw section value. Empty input yields the zero value (an absent layer). Unknown
 // fields are rejected so a misspelled key does not silently drop protection.
 func (h accountAccessHandler) Decode(raw json.RawMessage) (any, error) {
@@ -46,14 +52,14 @@ func (h accountAccessHandler) Validate(incoming, readOnly, _ any) error {
 	if err := validateStructure(cfg); err != nil {
 		return err
 	}
-	return validateCoherence(effectiveAccountAccess(h.base, cfg))
+	return validateCoherence(mergeAccountAccessValue(h.base, cfg))
 }
 
 // Merge lays the declarative document over the base when one exists, otherwise the writable layer.
 func (h accountAccessHandler) Merge(readOnly, writable any) any {
 	if ro, ok := readOnly.(accountAccessValue); ok && !ro.isEmpty() {
-		return effectiveAccountAccess(h.base, ro)
+		return mergeAccountAccessValue(h.base, ro)
 	}
 	wr, _ := writable.(accountAccessValue)
-	return effectiveAccountAccess(h.base, wr)
+	return mergeAccountAccessValue(h.base, wr)
 }

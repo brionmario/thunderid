@@ -6,6 +6,7 @@ package identitygovernance
 import (
 	"time"
 
+	"github.com/thunder-id/thunderid/internal/entitytype"
 	"github.com/thunder-id/thunderid/internal/notification"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 )
@@ -45,20 +46,20 @@ type AccessState struct {
 
 // observedFor returns the entry recorded for a method, whether or not it is currently locked.
 func (a AccessState) observedFor(method providers.AuthenticationMethod) LockEntry {
-	if method == AuthenticationMethodEntity {
-		if a.Lock.Entity == nil {
+	if method == AuthenticationMethodAccount {
+		if a.Lock.Account == nil {
 			return LockEntry{}
 		}
-		return *a.Lock.Entity
+		return *a.Lock.Account
 	}
 	return a.Lock.AuthenticationMethods[method]
 }
 
-// LockState holds the entity-wide entry and the per-method entries. A live entity entry holds under
-// either granularity; method entries are not read under entity granularity.
+// LockState holds the account-wide entry and the per-method entries. A live account entry holds under
+// either granularity; method entries are not read under account granularity.
 type LockState struct {
-	// Entity is the entity-wide entry, set under entity granularity and after an unsuspend.
-	Entity *LockEntry `json:"entity"`
+	// Account is the account-wide entry, set under account granularity and after an unsuspend.
+	Account *LockEntry `json:"account"`
 	// AuthenticationMethods holds the per-method entries, keyed by authentication method.
 	AuthenticationMethods map[providers.AuthenticationMethod]LockEntry `json:"authenticationMethods"`
 }
@@ -86,13 +87,13 @@ type LockEntry struct {
 	// ConsecutiveFailures counts failures since the entry was last cleared. Neither the window nor a
 	// lock resets it; only clearing the entry does.
 	ConsecutiveFailures int `json:"consecutiveFailures"`
-	// Reason is why an entity-wide entry exists.
+	// Reason is why an account-wide entry exists.
 	Reason LockReason `json:"reason"`
 }
 
-// EntityHold is the entity-wide hold written on unsuspend, in the same write that clears the
+// AccountHold is the account-wide hold written on unsuspend, in the same write that clears the
 // suspension.
-type EntityHold struct {
+type AccountHold struct {
 	// UnlockAt is permanentUnlockAt.
 	UnlockAt string
 	// Reason is descriptive only.
@@ -118,15 +119,15 @@ type AccessRead struct {
 	LastLoginAt string
 }
 
-// NotificationDependencies supplies the template and email sender services the lock email uses.
-// Omitting them disables the email without disabling account locks.
+// NotificationDependencies supplies the services the lock email uses. All are required for the email,
+// and omitting one disables it without disabling account locks.
 type NotificationDependencies struct {
 	// Templates renders the lock email.
 	Templates notificationTemplateRenderer
 	// Senders sends the email.
 	Senders notification.NotificationSenderServiceInterface
-	// DefaultSender names the email sender the email goes through.
-	DefaultSender defaultEmailSenderSource
+	// EntityTypes supplies the user type's primary email, the only address the email goes to.
+	EntityTypes entitytype.EntityTypeServiceInterface
 }
 
 // lockoutPolicy is the resolved lockout configuration for one category and authentication method.
@@ -204,14 +205,8 @@ type lockNotice struct {
 	episode      LockEpisode
 }
 
-// lockTemplate names the email templates for a lock that expires and for one that does not.
-type lockTemplate struct {
-	expiring  string
-	permanent string
-}
-
 // lockEnforcement says which of a category's recorded locks are still enforced. A lock whose method's
-// policy is switched off is not, and under entity granularity only the entity entry is. The zero
+// policy is switched off is not, and under account granularity only the account entry is. The zero
 // value enforces every lock.
 type lockEnforcement struct {
 	// unenforced is the set of methods whose recorded locks are not enforced.
@@ -245,7 +240,7 @@ func (v accountAccessValue) isEmpty() bool {
 
 // accountAccessCategory is one entity category's settings. A nil category inherits the layer below.
 type accountAccessCategory struct {
-	// LockGranularity is "authentication_method" or "entity". Nil inherits.
+	// LockGranularity is "authentication_method" or "account". Nil inherits.
 	LockGranularity *granularity `json:"lockGranularity,omitempty"`
 	// RecordLastLogin turns on the lastLoginAt write when access is granted.
 	RecordLastLogin *bool `json:"recordLastLogin,omitempty"`
@@ -279,12 +274,30 @@ type accountAccessLockNotification struct {
 	Email *accountAccessLockEmail `json:"email,omitempty"`
 }
 
-// accountAccessLockEmail is the automatic lock email for one category.
+// accountAccessLockEmail is the automatic lock email for one category. It goes to the user type's
+// primary email.
 type accountAccessLockEmail struct {
 	// Enabled turns the email on or off.
 	Enabled *bool `json:"enabled,omitempty"`
-	// RecipientAttribute is the profile attribute holding the address. A user without it is skipped.
-	RecipientAttribute *string `json:"recipientAttribute,omitempty"`
+	// Templates names the email templates. It is set only through the server config API; the bootstrap
+	// sets the defaults.
+	Templates *accountAccessLockTemplates `json:"templates,omitempty"`
+}
+
+// accountAccessLockTemplates names the default email templates and overrides for account-wide
+// and single-method locks.
+type accountAccessLockTemplates struct {
+	lockEmailTemplatePair
+	// Account is for a lock on every sign-in method.
+	Account *lockEmailTemplatePair `json:"account,omitempty"`
+	// Methods is for a lock on one method, keyed by a lockable method.
+	Methods map[string]lockEmailTemplatePair `json:"methods,omitempty"`
+}
+
+// lockEmailTemplatePair names the temporary and permanent lock email templates.
+type lockEmailTemplatePair struct {
+	Temporary string `json:"temporary,omitempty"`
+	Permanent string `json:"permanent,omitempty"`
 }
 
 // accountAccessPolicy is a lockout policy, used as a category default or a per-method override.

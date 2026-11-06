@@ -230,6 +230,42 @@ func (s *PromptOnlyNodeTestSuite) TestExecuteWithVerboseModeEnabled() {
 	s.Equal(meta, resp.Meta)
 }
 
+func (s *PromptOnlyNodeTestSuite) TestExecuteLeavesVariablePlaceholdersInMeta() {
+	meta := map[string]interface{}{
+		"components": []interface{}{
+			map[string]interface{}{
+				"type":  "TEXT",
+				"id":    "help",
+				"label": "Trouble signing in? Write to {{var(supportEmail)}}",
+			},
+		},
+	}
+
+	node := newPromptNode("prompt-1", map[string]interface{}{}, false, false)
+	promptNode := node.(PromptNodeInterface)
+	promptNode.SetMeta(meta)
+	promptNode.SetPrompts([]common.Prompt{
+		{
+			Inputs: []providers.Input{{Identifier: "username", Required: true}},
+			Action: &common.Action{Ref: "submit", NextNode: "next"},
+		},
+	})
+
+	ctx := &providers.NodeContext{
+		ExecutionID: "test-flow",
+		UserInputs:  map[string]string{},
+		RuntimeData: map[string]string{"var.supportEmail": `"help@example.com"`},
+		Verbose:     true,
+	}
+	resp, err := node.Execute(ctx)
+
+	s.Nil(err)
+	s.NotNil(resp)
+	components := resp.Meta.(map[string]interface{})["components"].([]interface{})
+	s.Equal("Trouble signing in? Write to {{var(supportEmail)}}", components[0].(map[string]interface{})["label"],
+		"variables are resolved in executor properties only")
+}
+
 func (s *PromptOnlyNodeTestSuite) TestExecuteWithVerboseModeDisabled() {
 	meta := map[string]interface{}{
 		"components": []interface{}{
@@ -3435,4 +3471,84 @@ func (s *PromptOnlyNodeTestSuite) TestFilteredMeta_FilteredOutActionsDropped() {
 		"single ACR filter must trigger auto-selection and complete the node")
 	s.Equal("otp-node", resp.NextNodeID)
 	s.Nil(resp.Meta, "meta is not returned for a completed (auto-selected) chooser node")
+}
+
+func (s *PromptOnlyNodeTestSuite) TestBuildSyntheticComponentList_SelectCarriesOptions() {
+	node := &promptNode{}
+	inputs := []providers.Input{
+		{
+			Identifier:  "tier",
+			Type:        providers.InputTypeSelect,
+			Required:    true,
+			DisplayName: "Tier",
+			Options:     []string{"Gold", "Platinum", "Bronze"},
+		},
+		{Identifier: "nickname", Type: providers.InputTypeText},
+	}
+
+	synthetic, promotions := node.buildSyntheticComponentList(
+		inputs, map[string]map[string]interface{}{}, map[string]struct{}{})
+
+	s.Empty(promotions)
+	s.Len(synthetic, 2)
+
+	tier, ok := synthetic[0].(map[string]interface{})
+	s.True(ok)
+	s.Equal(providers.InputTypeSelect, tier["type"])
+	s.Equal(true, tier["required"])
+	s.Equal([]string{"Gold", "Platinum", "Bronze"}, tier["options"])
+
+	// Non-select inputs must not gain an options key.
+	nickname, ok := synthetic[1].(map[string]interface{})
+	s.True(ok)
+	_, hasOptions := nickname["options"]
+	s.False(hasOptions)
+}
+
+func (s *PromptOnlyNodeTestSuite) TestBuildSyntheticComponentList_SelectWithoutOptionsOmitsKey() {
+	node := &promptNode{}
+	inputs := []providers.Input{{Identifier: "tier", Type: providers.InputTypeSelect}}
+
+	synthetic, _ := node.buildSyntheticComponentList(
+		inputs, map[string]map[string]interface{}{}, map[string]struct{}{})
+
+	s.Len(synthetic, 1)
+	tier, _ := synthetic[0].(map[string]interface{})
+	_, hasOptions := tier["options"]
+	s.False(hasOptions)
+}
+
+func (s *PromptOnlyNodeTestSuite) TestBuildSyntheticComponentList_KeepsMetaTextInputForSelect() {
+	node := &promptNode{}
+	metaComps := map[string]map[string]interface{}{
+		"tier": {"id": "tier", "ref": "tier", "type": "TEXT_INPUT"},
+	}
+	inputs := []providers.Input{{
+		Identifier: "tier",
+		Type:       providers.InputTypeSelect,
+		Options:    []string{"Gold", "Bronze"},
+	}}
+
+	synthetic, promotions := node.buildSyntheticComponentList(
+		inputs, metaComps, map[string]struct{}{})
+
+	s.Empty(synthetic)
+	s.Empty(promotions)
+}
+
+func (s *PromptOnlyNodeTestSuite) TestBuildSyntheticComponentList_KeepsExistingSelectMeta() {
+	node := &promptNode{}
+	metaComps := map[string]map[string]interface{}{
+		"tier": {"id": "tier", "ref": "tier", "type": "SELECT", "options": []interface{}{}},
+	}
+	inputs := []providers.Input{{
+		Identifier: "tier",
+		Type:       providers.InputTypeSelect,
+		Options:    []string{"Gold"},
+	}}
+
+	_, promotions := node.buildSyntheticComponentList(
+		inputs, metaComps, map[string]struct{}{})
+
+	s.Empty(promotions)
 }

@@ -5,15 +5,20 @@ package identitygovernance
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/thunder-id/thunderid/internal/entitytype"
 	"github.com/thunder-id/thunderid/internal/notification"
 	notifcommon "github.com/thunder-id/thunderid/internal/notification/common"
+	notificationconfig "github.com/thunder-id/thunderid/internal/notification/config"
 	"github.com/thunder-id/thunderid/internal/notificationtemplate"
+	"github.com/thunder-id/thunderid/internal/serverconfig"
 	syscontext "github.com/thunder-id/thunderid/internal/system/context"
 	"github.com/thunder-id/thunderid/internal/system/deployment"
 	"github.com/thunder-id/thunderid/internal/system/log"
+	"github.com/thunder-id/thunderid/internal/system/security"
 	sysutils "github.com/thunder-id/thunderid/internal/system/utils"
 	tidcommon "github.com/thunder-id/thunderid/pkg/thunderidengine/common"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
@@ -25,31 +30,29 @@ type notificationTemplateRenderer interface {
 		in notificationtemplate.RenderInput) (*notificationtemplate.ResolvedContent, *tidcommon.ServiceError)
 }
 
-// defaultEmailSenderSource names the server's default email sender, or "" when none is configured.
-type defaultEmailSenderSource interface {
-	DefaultEmailSenderID(ctx context.Context) string
-}
-
-// lockNotifierInterface sends a notice when an automatic lock forms.
-type lockNotifierInterface interface {
+// LockNotifierInterface sends a notice when an automatic lock forms, from background workers.
+type LockNotifierInterface interface {
 	// NotifyLockFormed schedules a notice for a committed lock. It must not block or affect the
 	// authentication response.
 	NotifyLockFormed(ctx context.Context, entity GovernedEntity, method providers.AuthenticationMethod,
 		episode LockEpisode)
-	// Close stops accepting notices and waits, up to a fixed budget, for the queued ones.
-	Close()
+	// Stop refuses new notices and lets the queued ones finish within the shutdown budget, then
+	// records anything abandoned as dropped. It is safe to call more than once.
+	Stop()
 }
 
 // lockEmailNotifier delivers lock notices as email through the server's default email sender.
 type lockEmailNotifier struct {
-	source    accountAccessSourceInterface
-	profiles  entityStateProvider
-	templates notificationTemplateRenderer
-	senders   notification.NotificationSenderServiceInterface
-	sender    defaultEmailSenderSource
-	queue     chan lockNotice
-	timeout   time.Duration
-	// ctx is the workers' context, cancelled when Close runs out of its shutdown budget.
+	source      accountAccessSourceInterface
+	profiles    entityStateProvider
+	entityTypes entitytype.EntityTypeServiceInterface
+	templates   notificationTemplateRenderer
+	senders     notification.NotificationSenderServiceInterface
+	// serverConfig reads the notification section's default email sender.
+	serverConfig serverconfig.ServerConfigService
+	queue        chan lockNotice
+	timeout      time.Duration
+	// ctx is the workers' context, cancelled when Stop runs out of its shutdown budget.
 	ctx            context.Context
 	cancel         context.CancelFunc
 	shutdownBudget time.Duration
@@ -61,16 +64,18 @@ type lockEmailNotifier struct {
 }
 
 // newLockEmailNotifier builds the notifier and starts its workers.
-func newLockEmailNotifier(source accountAccessSourceInterface, profiles entityStateProvider,
+func newLockEmailNotifier(source accountAccessSourceInterface, serverConfig serverconfig.ServerConfigService,
+	profiles entityStateProvider, entityTypes entitytype.EntityTypeServiceInterface,
 	templates notificationTemplateRenderer, senders notification.NotificationSenderServiceInterface,
-	sender defaultEmailSenderSource) *lockEmailNotifier {
+) *lockEmailNotifier {
 	ctx, cancel := context.WithCancel(context.Background())
 	notifier := &lockEmailNotifier{
 		source:         source,
 		profiles:       profiles,
+		entityTypes:    entityTypes,
 		templates:      templates,
 		senders:        senders,
-		sender:         sender,
+		serverConfig:   serverConfig,
 		queue:          make(chan lockNotice, noticeQueueCapacity),
 		timeout:        noticeTimeout,
 		ctx:            ctx,
@@ -91,7 +96,7 @@ func newLockEmailNotifier(source accountAccessSourceInterface, profiles entitySt
 // delivery.
 func (n *lockEmailNotifier) NotifyLockFormed(ctx context.Context, entity GovernedEntity,
 	method providers.AuthenticationMethod, episode LockEpisode) {
-	if _, enabled := lockEmailRecipient(n.source.Current(ctx), entity.Category); !enabled {
+	if lockEmailFor(n.source.Current(ctx), entity.Category) == nil {
 		n.record(ctx, entity.ID, method, outcomeDisabled)
 		return
 	}
@@ -113,9 +118,9 @@ func (n *lockEmailNotifier) NotifyLockFormed(ctx context.Context, entity Governe
 	}
 }
 
-// Close stops accepting notices and waits up to the shutdown budget for the queue, then cancels the
-// sends in flight and records the notices left as dropped.
-func (n *lockEmailNotifier) Close() {
+// Stop implements LockNotifierInterface. It waits up to the shutdown budget for the queue, then
+// cancels the sends in flight and records the notices left as dropped.
+func (n *lockEmailNotifier) Stop() {
 	n.closeOnce.Do(func() {
 		n.mu.Lock()
 		n.closed = true
@@ -168,9 +173,14 @@ func (n *lockEmailNotifier) deliver(notice lockNotice) {
 	ctx, cancel := context.WithTimeout(n.workCtx(notice), n.timeout)
 	defer cancel()
 
-	attribute, enabled := lockEmailRecipient(n.source.Current(ctx), notice.category)
-	if !enabled {
+	email := lockEmailFor(n.source.Current(ctx), notice.category)
+	if email == nil {
 		n.record(ctx, notice.entityID, notice.method, outcomeDisabled)
+		return
+	}
+	handle, data := lockTemplateFor(email, notice.method, notice.episode)
+	if handle == "" {
+		n.record(ctx, notice.entityID, notice.method, outcomeNoTemplate)
 		return
 	}
 	profile, err := n.profiles.GetEntityProfile(ctx, notice.entityID)
@@ -178,9 +188,14 @@ func (n *lockEmailNotifier) deliver(notice lockNotice) {
 		n.record(ctx, notice.entityID, notice.method, outcomeReadFailed, log.Error(err))
 		return
 	}
+	attribute, svcErr := n.primaryEmailAttribute(ctx, profile.Type)
+	if svcErr != nil {
+		n.record(ctx, notice.entityID, notice.method, outcomeReadFailed, log.String("errorCode", svcErr.Code))
+		return
+	}
+	// Only the primary email is used; a type without one, or a user without a value, gets no email.
 	address := sysutils.ExtractDisplayValue(profile.Attributes, attribute)
 	if address == "" {
-		// Attribute missing: skip, never fall back to another attribute.
 		n.record(ctx, notice.entityID, notice.method, outcomeMissingContact)
 		return
 	}
@@ -189,13 +204,16 @@ func (n *lockEmailNotifier) deliver(notice lockNotice) {
 		return
 	}
 
-	senderID := n.sender.DefaultEmailSenderID(ctx)
+	senderID, svcErr := n.defaultSenderID(ctx)
+	if svcErr != nil {
+		n.record(ctx, notice.entityID, notice.method, outcomeNoSender, log.String("errorCode", svcErr.Code))
+		return
+	}
 	if senderID == "" {
 		n.record(ctx, notice.entityID, notice.method, outcomeNoSender)
 		return
 	}
 
-	handle, data := lockTemplateFor(notice.method, notice.episode)
 	rendered, svcErr := n.templates.Resolve(ctx, notificationtemplate.ChannelTypeEmail, handle,
 		notificationtemplate.RenderInput{Data: data})
 	if svcErr != nil {
@@ -229,9 +247,38 @@ func (n *lockEmailNotifier) record(ctx context.Context, entityID string, method 
 	switch outcome {
 	case outcomeQueued, outcomeAccepted, outcomeDisabled, outcomeClosed, outcomeMissingContact:
 		n.logger.Debug(ctx, "Account lock notification", fields...)
-	case outcomeInvalidContact, outcomeNoSender, outcomeQueueFull, outcomeShutdown:
+	case outcomeInvalidContact, outcomeNoSender, outcomeNoTemplate, outcomeQueueFull, outcomeShutdown:
 		n.logger.Warn(ctx, "Account lock notification not delivered", fields...)
 	default:
 		n.logger.Error(ctx, "Account lock notification not delivered", fields...)
 	}
+}
+
+// defaultSenderID reads the default email sender from the notification section, or "" when none is
+// set.
+func (n *lockEmailNotifier) defaultSenderID(ctx context.Context) (string, *tidcommon.ServiceError) {
+	value, svcErr := n.serverConfig.GetMergedConfig(ctx, string(serverconfig.ConfigNameNotification))
+	if svcErr != nil {
+		return "", svcErr
+	}
+	section, _ := value.(notificationconfig.NotificationSectionConfig)
+	return strings.TrimSpace(section.DefaultEmailSenderID), nil
+}
+
+// primaryEmailAttribute returns the user type's primary email attribute, or "" when the type has none.
+func (n *lockEmailNotifier) primaryEmailAttribute(ctx context.Context,
+	userType string) (string, *tidcommon.ServiceError) {
+	if userType == "" {
+		return "", nil
+	}
+	// The notice has no caller, so the type is read with runtime privilege.
+	entityType, svcErr := n.entityTypes.GetEntityTypeByHandle(security.WithRuntimeContext(ctx),
+		entitytype.TypeCategoryUser, userType)
+	if svcErr != nil {
+		return "", svcErr
+	}
+	if entityType == nil || entityType.SystemAttributes == nil {
+		return "", nil
+	}
+	return entityType.SystemAttributes.PrimaryEmail, nil
 }

@@ -467,3 +467,62 @@ func refusalResponse(execResp *providers.ExecutorResponse, svcErr *tidcommon.Ser
 	execResp.Error = &refusal
 	return execResp, nil
 }
+
+// statedHold returns the flow error for a hold the authentication provider manager states, or nil
+// when svcErr states none.
+func statedHold(svcErr *tidcommon.ServiceError) *tidcommon.ServiceError {
+	if svcErr == nil {
+		return nil
+	}
+	switch svcErr.Code {
+	case authnprovidermgr.ErrorAccountLocked.Code:
+		return &ErrAccountLocked
+	case authnprovidermgr.ErrorAccountSuspended.Code:
+		return &ErrAccountSuspended
+	default:
+		return nil
+	}
+}
+
+// statedDecision returns the flow error for the hold a refused decision names, or nil when it names
+// none.
+func statedDecision(decision providers.AccessDecision) *tidcommon.ServiceError {
+	switch decision.Reason {
+	case providers.AccessRefusalReasonLocked:
+		return &ErrAccountLocked
+	case providers.AccessRefusalReasonSuspended:
+		return &ErrAccountSuspended
+	default:
+		return nil
+	}
+}
+
+// governanceFault is the error a gate raises when the identity governance provider could not decide.
+func governanceFault(svcErr *tidcommon.ServiceError) error {
+	return fmt.Errorf("identity governance check failed: %s", svcErr.Error.DefaultValue)
+}
+
+// dispatchPlaneFor maps the flow a challenge belongs to onto the plane it is checked at. A lock gives
+// way at the recovery plane, so recovery and registration challenges still go out; every other flow
+// is checked at the dispatch plane.
+func dispatchPlaneFor(flowType providers.FlowType) providers.AccessPlane {
+	switch flowType {
+	case providers.FlowTypeRecovery, providers.FlowTypeRegistration:
+		return providers.AccessPlaneRecovery
+	default:
+		return providers.AccessPlaneDispatch
+	}
+}
+
+// requestedAuthorizationDetails returns the requested authorization details, or nil when there are none.
+func requestedAuthorizationDetails(ctx *providers.NodeContext) ([]providers.AuthorizationDetail, error) {
+	encoded := ctx.RuntimeData[common.RuntimeKeyRequestedAuthorizationDetails]
+	if encoded == "" {
+		return nil, nil
+	}
+	var details []providers.AuthorizationDetail
+	if err := json.Unmarshal([]byte(encoded), &details); err != nil {
+		return nil, fmt.Errorf("authorization details are malformed: %w", err)
+	}
+	return details, nil
+}
