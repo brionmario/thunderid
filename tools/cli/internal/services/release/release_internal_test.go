@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,7 @@ import (
 // A download cut off mid-transfer used to leave its partial file on disk — tens of
 // megabytes nothing ever cleans up, and a truncated artifact a later run could pick up.
 func TestDownloadFile_RemovesTruncatedFile(t *testing.T) {
+	noRetryDelay(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Length", "1024")
 		w.WriteHeader(http.StatusOK)
@@ -54,6 +57,7 @@ func dirEntryNames(t *testing.T, dir string) []string {
 }
 
 func TestDownloadFile_PreservesExistingFileAfterFailure(t *testing.T) {
+	noRetryDelay(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Length", "1024")
 		_, _ = w.Write([]byte("partial"))
@@ -83,6 +87,63 @@ func TestDownloadFile_KeepsCompleteFile(t *testing.T) {
 	data, err := os.ReadFile(dest)
 	require.NoError(t, err)
 	assert.Equal(t, "complete", string(data))
+}
+
+// noRetryDelay drops the wait between download attempts so a test of a failing download stays fast.
+func noRetryDelay(t *testing.T) {
+	t.Helper()
+	saved := downloadRetryDelays
+	downloadRetryDelays = make([]time.Duration, len(saved))
+	t.Cleanup(func() { downloadRetryDelays = saved })
+}
+
+// A release host's brief 5xx (a GitHub 504 on a release asset, say) used to fail the whole install.
+func TestDownloadFile_RetriesTransientStatus(t *testing.T) {
+	noRetryDelay(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) < 3 {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
+		_, _ = w.Write([]byte("complete"))
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "release.zip")
+	require.NoError(t, downloadFile(srv.URL, dest, nil))
+	assert.Equal(t, int32(3), calls.Load())
+	data, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, "complete", string(data))
+}
+
+func TestDownloadFile_GivesUpAfterRetries(t *testing.T) {
+	noRetryDelay(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	err := downloadFile(srv.URL, filepath.Join(t.TempDir(), "release.zip"), nil)
+	require.ErrorContains(t, err, "HTTP 503")
+	assert.Equal(t, int32(len(downloadRetryDelays)+1), calls.Load())
+}
+
+func TestDownloadFile_DoesNotRetryClientError(t *testing.T) {
+	noRetryDelay(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	err := downloadFile(srv.URL, filepath.Join(t.TempDir(), "release.zip"), nil)
+	require.ErrorContains(t, err, "HTTP 404")
+	assert.Equal(t, int32(1), calls.Load())
 }
 
 // unreachableURL returns the address of a server that is no longer listening, so a

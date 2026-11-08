@@ -429,7 +429,30 @@ func (c *Client) availableVersions(data *releasesData) string {
 	return " (available: " + strings.Join(versions, ", ") + ")"
 }
 
+// downloadRetryDelays is the wait before each retry of a download that failed transiently, so a
+// release host's brief 5xx or a dropped connection does not fail an install outright.
+var downloadRetryDelays = []time.Duration{2 * time.Second, 5 * time.Second}
+
+// transientError marks a download failure worth retrying: a network error or a server-side status.
+type transientError struct{ err error }
+
+func (e *transientError) Error() string { return e.err.Error() }
+func (e *transientError) Unwrap() error { return e.err }
+
 func downloadFile(url, destPath string, onProgress func(received, total int64)) error {
+	err := downloadOnce(url, destPath, onProgress)
+	for _, delay := range downloadRetryDelays {
+		var transient *transientError
+		if !errors.As(err, &transient) {
+			break
+		}
+		time.Sleep(delay)
+		err = downloadOnce(url, destPath, onProgress)
+	}
+	return err
+}
+
+func downloadOnce(url, destPath string, onProgress func(received, total int64)) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -438,12 +461,16 @@ func downloadFile(url, destPath string, onProgress func(received, total int64)) 
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return &transientError{err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d downloading %s", resp.StatusCode, url)
+		err := fmt.Errorf("HTTP %d downloading %s", resp.StatusCode, url)
+		if resp.StatusCode >= http.StatusInternalServerError || resp.StatusCode == http.StatusTooManyRequests {
+			return &transientError{err}
+		}
+		return err
 	}
 
 	f, err := os.CreateTemp(filepath.Dir(destPath), "."+filepath.Base(destPath)+"-*")
@@ -473,7 +500,7 @@ func downloadFile(url, destPath string, onProgress func(received, total int64)) 
 			break
 		}
 		if err != nil {
-			return err
+			return &transientError{err}
 		}
 	}
 	if err := f.Close(); err != nil {
